@@ -36,15 +36,23 @@ This project detects fake news using **seven sequential phases**:
 | 6 | Fusion Brain | Trains an XGBoost meta-learner on all signals (text + RAG + VLM + framing) |
 | 7 | Explainability | Produces token attributions, Grad-CAM heatmaps, counterfactuals, and evidence cards |
 
-The **Streamlit app** (`app.py`) integrates Phases 4–7 into a real-time web interface.
+The **FastAPI Web App** (`server.py`) integrates Phases 4–7 into a real-time web interface.
 
 ---
+
+
+
+### 🔥 Mega Upgrades Included in this Version:
+- **FastAPI Backend:** Replaced heavy Streamlit framework with a lightning-fast asynchronous Python API.
+- **Chrome Extension:** Highlight and fact-check text anywhere on the internet using the custom `chrome_extension/`.
+- **History Database:** Automatic persistent storage of all analyses via an embedded SQLite database (`history.db`).
+- **PDF Document Intelligence:** Upload full `.pdf` files to extract text and analyze entire documents.
 
 ## 2. System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         USER INPUT (app.py)                         │
+│                         USER INPUT (server.py)                         │
 │              Post Text (required) + Image (optional)                │
 └────────────────────────────┬────────────────────────────────────────┘
                              │
@@ -105,7 +113,7 @@ Raw Data → [Phase 1] → JSONL Manifests
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| `streamlit` | ≥ 1.30 | Web interface (app.py) |
+| `streamlit` | ≥ 1.30 | Web interface (server.py) |
 | `transformers` | ≥ 4.40 | RoBERTa (Phase 2), roberta-large-mnli (Phase 3), Qwen2-VL-7B (Phase 4) |
 | `peft` | ≥ 0.10 | LoRA fine-tuning of Qwen2-VL (Phase 4) |
 | `bitsandbytes` | ≥ 0.43 | QLoRA 4-bit quantization (Phase 4, GPU only) |
@@ -131,7 +139,7 @@ Raw Data → [Phase 1] → JSONL Manifests
 ```
 AI-NLP-FAKE-NEWS-DETECTION/
 │
-├── app.py                          ← Streamlit web app (main entry point)
+├── server.py                          ← FastAPI & HTML/JS web app (main entry point)
 │
 ├── configs/                        ← YAML configuration files for each phase
 │   ├── data.yaml                   ← Phase 1: dataset paths + label maps
@@ -230,7 +238,7 @@ Below is a precise breakdown of every core file: what it does, what inputs it ne
 
 ---
 
-### `app.py` — Streamlit Web App
+### `server.py` — Streamlit Web App
 
 **What it does:** The main user-facing application. Takes a news post as input, runs the analysis pipeline, and displays predictions with explanations.
 
@@ -249,7 +257,7 @@ Below is a precise breakdown of every core file: what it does, what inputs it ne
 - Counterfactual analysis JSON
 - Downloadable `evidence_card.json`
 
-**Artifacts needed to run app.py:**
+**Artifacts needed to run server.py:**
 - `artifacts/fusion/xgb_fusion.json`
 - `artifacts/fusion/calibration/calibrator.json`
 - `artifacts/text_bas/hf_model/` (for token XAI)
@@ -613,7 +621,7 @@ output_dir: artifacts/vlm/stage_b
 | `artifacts/fusion/features_full.csv` | CSV | Combined train+val feature matrix |
 
 **Outputs:**
-- `artifacts/fusion/xgb_fusion.json` — Saved XGBoost model **(required by app.py)**
+- `artifacts/fusion/xgb_fusion.json` — Saved XGBoost model **(required by server.py)**
 - `artifacts/fusion/feature_importance.csv` — Feature gain scores
 - `artifacts/fusion/val_probs.csv` — Val set predicted probabilities (input to calibrate.py)
 
@@ -628,7 +636,7 @@ output_dir: artifacts/vlm/stage_b
 | `artifacts/fusion/val_probs.csv` | CSV | Validation predicted probabilities from XGBoost |
 
 **Outputs:**
-- `artifacts/fusion/calibration/calibrator.json` — `{"temperature": 1.23}` **(required by app.py)**
+- `artifacts/fusion/calibration/calibrator.json` — `{"temperature": 1.23}` **(required by server.py)**
 - `artifacts/fusion/calibration/reliability_curve.csv` — Calibration curve data
 - `artifacts/fusion/calibration/calibration_report.txt` — Pre/post calibration comparison
 
@@ -636,7 +644,7 @@ output_dir: artifacts/vlm/stage_b
 
 ### `src/fusion/infer.py` — Phase 6: Real-Time Inference
 
-**What it does:** Loads the trained XGBoost + temperature calibrator and runs a single feature dict through the full prediction pipeline. Used live in app.py.
+**What it does:** Loads the trained XGBoost + temperature calibrator and runs a single feature dict through the full prediction pipeline. Used live in server.py.
 
 | Input | Type | Description |
 |-------|------|-------------|
@@ -798,7 +806,7 @@ STEP 7 ── src/fusion/calibrate.py ──────────────
           Input:  artifacts/fusion/val_probs.csv
           Output: artifacts/fusion/calibration/calibrator.json
 
-DONE ──── streamlit run app.py ──────────────────────────────────────
+DONE ──── streamlit run server.py ──────────────────────────────────────
           Needs:  artifacts/fusion/xgb_fusion.json         ✓
                   artifacts/fusion/calibration/calibrator.json ✓
                   artifacts/text_bas/hf_model/             ✓
@@ -932,7 +940,7 @@ jupyter notebook notebooks/04A_stageA_alignment_qwen2vl7b.ipynb
 jupyter notebook notebooks/04B_fakeddit_mismatch_qwen2vl7b.ipynb
 ```
 
-### Phase 5 — Framing signals (no separate script — runs inside app.py)
+### Phase 5 — Framing signals (no separate script — runs inside server.py)
 
 ```python
 # Test manually:
@@ -956,7 +964,7 @@ python -m src.fusion.train_meta
 python -m src.fusion.calibrate
 ```
 
-### Phase 7 — Explainability (runs automatically in app.py)
+### Phase 7 — Explainability (runs automatically in server.py)
 
 ```python
 # Test manually:
@@ -985,7 +993,7 @@ artifacts/text_bas/hf_model/
 
 **Start the app:**
 ```bash
-streamlit run app.py
+streamlit run server.py
 ```
 
 The browser will open at `http://localhost:8501`.
@@ -1010,7 +1018,7 @@ After running all phases, the `artifacts/` directory contains:
 ```
 artifacts/
 ├── text_bas/
-│   ├── hf_model/               ← RoBERTa model (used by app.py for XAI)
+│   ├── hf_model/               ← RoBERTa model (used by server.py for XAI)
 │   ├── best.ckpt               ← Best PyTorch checkpoint
 │   ├── metrics.json            ← Test accuracy + F1 scores
 │   ├── confusion_matrix.png    ← Visual confusion matrix
@@ -1028,11 +1036,11 @@ artifacts/
 │   └── preds/                  ← JSONL prediction files per split
 │
 ├── fusion/
-│   ├── xgb_fusion.json         ← Trained XGBoost model ← app.py needs this
+│   ├── xgb_fusion.json         ← Trained XGBoost model ← server.py needs this
 │   ├── features_*.csv          ← Feature matrices
 │   ├── feature_importance.csv  ← Top features by gain
 │   └── calibration/
-│       ├── calibrator.json     ← Temperature value ← app.py needs this
+│       ├── calibrator.json     ← Temperature value ← server.py needs this
 │       └── reliability_curve.csv
 │
 ├── cards/                      ← Evidence card JSONs (generated at runtime)
@@ -1047,7 +1055,7 @@ artifacts/
 
 | Issue | Location | Impact | Status |
 |-------|----------|--------|--------|
-| `explain_text_tokens` imported but function is named `explain_text` | `app.py:29` vs `src/xai/text.py` | App crashes when Analyze is clicked | Bug — rename function in `src/xai/text.py` |
+| `explain_text_tokens` imported but function is named `explain_text` | `server.py:29` vs `src/xai/text.py` | App crashes when Analyze is clicked | Bug — rename function in `src/xai/text.py` |
 | `AutoTokenizer` loads at import time | `src/xai/text.py` top-level | Import fails if `artifacts/text_bas/hf_model/` is missing | Expected — run Phase 2 first |
 | Serper API key hardcoded in source | `src/rag/retrieve.py:64` | Security risk — key exposed in git history | Use env var `SERPER_API_KEY` instead |
 | Hardcoded absolute path `/teamspace/studios/this_studio` | `src/fusion/build_features.py` | Breaks on any other machine | Change to relative path using `Path(__file__)` |
@@ -1065,7 +1073,7 @@ artifacts/
 You need the trained artifacts. If they are already present in `artifacts/fusion/` and `artifacts/text_bas/hf_model/`, run:
 ```bash
 pip install streamlit transformers torch xgboost textblob captum Pillow
-streamlit run app.py
+streamlit run server.py
 ```
 
 ---
@@ -1091,7 +1099,7 @@ Phase 2 reads files that Phase 1 creates. If you skip Phase 1, Phase 2 will cras
 
 - **Phase 2 (RoBERTa training):** Runs on CPU but is slow. A GPU speeds it up significantly.
 - **Phase 4 (VLM training):** Requires a CUDA GPU with at least 24 GB VRAM (e.g., A100, H100). Cannot run on CPU.
-- **App (app.py):** Runs on CPU if VLM is disabled. Enable VLM only if you have a compatible GPU.
+- **App (server.py):** Runs on CPU if VLM is disabled. Enable VLM only if you have a compatible GPU.
 
 ---
 
