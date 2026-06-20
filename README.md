@@ -1,3 +1,11 @@
+---
+title: Fake News Detection System
+emoji: 🛡️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+---
 # AI-NLP-FAKE-NEWS-DETECTION
 
 A multimodal fake news detection system that combines text analysis, image-text consistency checking, web evidence retrieval, and explainable AI into a single end-to-end pipeline. The system accepts a news post (text + optional image) and classifies it as **Fake**, **Real**, or **Uncertain**, along with human-readable explanations.
