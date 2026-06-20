@@ -6,13 +6,33 @@ import tempfile
 import sqlite3
 import datetime
 import io
-from fastapi import FastAPI, Form, UploadFile, File
+import uvicorn
+import sys
+from huggingface_hub import snapshot_download
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from typing import Optional
+
+# ==========================================
+# BOOTSTRAP: DOWNLOAD MISSING LFS MODELS
+# ==========================================
+safetensor_path = "artifacts/text_bas/hf_model/model.safetensors"
+if not os.path.exists(safetensor_path) or os.path.getsize(safetensor_path) < 1000000:
+    print("===== Downloading Missing ML Models (LFS Pointers detected) =====", flush=True)
+    snapshot_download(
+        repo_id='jagannadharao8/fake-news-detection',
+        repo_type='space',
+        local_dir='.',
+        allow_patterns=['artifacts/**'],
+        local_dir_use_symlinks=False
+    )
+    print("===== Models Downloaded! =====", flush=True)
 
 import PyPDF2
+from contextlib import asynccontextmanager
 
 # Load environment variables
 load_dotenv()

@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY --chown=user . .
 
+# Download the massive ML models (LFS files) directly from the Hugging Face Space
+RUN rm -rf /app/artifacts/* && python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='jagannadharao8/fake-news-detection', repo_type='space', local_dir='/app', allow_patterns=['artifacts/**'])"
+
 # Expose port 7860 (Hugging Face default)
 EXPOSE 7860
 
