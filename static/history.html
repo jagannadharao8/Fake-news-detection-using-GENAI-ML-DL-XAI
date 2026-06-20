@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analysis History</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #f8fafc; font-weight: 600; color: #475569; }
+    tr:hover { background: #f1f5f9; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+    .b-fake { background: var(--red-bg); color: var(--red-text); border: 1px solid var(--red-border); }
+    .b-real { background: var(--green-bg); color: var(--green-text); border: 1px solid var(--green-border); }
+    .b-unc { background: var(--yellow-bg); color: var(--yellow-text); border: 1px solid var(--yellow-border); }
+  </style>
+</head>
+<body>
+  <div class="app-header" style="padding: 2rem; margin-bottom: 1rem;">
+    <h1>Analysis History</h1>
+    <p><a href="/" style="color: white; text-decoration: underline;">← Back to Analyzer</a></p>
+  </div>
+  <div class="container">
+    <div class="white-card">
+      <table id="history-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Analyzed Text / File</th>
+            <th>Verdict</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="4" style="text-align:center;">Loading history...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    fetch('/api/history').then(r => r.json()).then(data => {
+      const tbody = document.getElementById('history-body');
+      tbody.innerHTML = '';
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No analysis history found.</td></tr>';
+        return;
+      }
+      data.forEach(row => {
+        let vClass = 'b-unc';
+        if (row.verdict === 'Fake') vClass = 'b-fake';
+        if (row.verdict === 'Real') vClass = 'b-real';
+        
+        let textTrunc = row.text;
+        if (textTrunc.length > 80) textTrunc = textTrunc.substring(0, 80) + '...';
+        
+        tbody.innerHTML += `
+          <tr>
+            <td style="font-size:0.85rem; color:#64748b;">${row.timestamp}</td>
+            <td style="font-size:0.95rem;">${textTrunc}</td>
+            <td><span class="badge ${vClass}">${row.verdict}</span></td>
+            <td>${row.confidence.toFixed(1)}%</td>
+          </tr>
+        `;
+      });
+    }).catch(e => {
+      document.getElementById('history-body').innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Failed to load history.</td></tr>';
+    });
+  </script>
+</body>
+</html>

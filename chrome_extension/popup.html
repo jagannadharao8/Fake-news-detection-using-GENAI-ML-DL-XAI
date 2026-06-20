@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <h3>🛡️ Veritas AI</h3>
+  </div>
+  <div class="container">
+    <textarea id="claim-text" placeholder="Highlight text on the page or paste here to analyze..."></textarea>
+    <button id="analyze-btn">Run Analysis</button>
+    
+    <div id="loader" class="hidden">
+      <div class="spinner"></div>
+      <p style="text-align:center; font-size:12px; margin-top:5px; color:#64748b;">Checking facts...</p>
+    </div>
+
+    <div id="results" class="hidden">
+      <div id="verdict-banner" class="verdict-banner"></div>
+      <div class="metrics">
+        <p><strong>Confidence:</strong> <span id="conf-val"></span></p>
+        <p><strong>Web Search (RAG):</strong> <span id="rag-val"></span></p>
+      </div>
+      <button id="reset-btn" style="background:#e2e8f0; color:#334155;">Analyze Another</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

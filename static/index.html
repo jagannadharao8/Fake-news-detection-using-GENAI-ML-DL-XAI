@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fake News Detector</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- HEADER -->
+  <div class="app-header">
+    <div class="header-badge">🛡️ AI-POWERED</div>
+    <h1>Fake News Detector</h1>
+    <p>Paste any news headline, social media post, or claim. Our AI analyses<br>text, image, sentiment, and writing style to detect misinformation instantly.</p>
+    <div style="text-align:center; margin-bottom: 2rem;">
+      <a href="history.html" style="color: rgba(255,255,255,0.9); text-decoration: underline; font-weight: 500;">📊 View Analysis History</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="input-section">
+      <form id="analyze-form">
+        <div class="input-columns">
+          <!-- Left Column: Image -->
+          <div class="input-col">
+            <label>🖼️ Attach Image or Document</label>
+            <div class="file-upload">
+              <span class="upload-btn">↑ Browse files</span>
+              <span id="file-name" style="margin-top: 1rem; font-size: 0.9rem; color: #475569;">Drag and drop file here</span>
+              <div class="file-desc" style="margin-top: 0.5rem;">Limit 200MB • JPG, PNG, PDF</div>
+              <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/webp, application/pdf">
+            </div>
+          </div>
+          
+          <!-- Right Column: Text -->
+          <div class="input-col">
+            <label>📝 Enter News Headline or Post Text</label>
+            <textarea id="text" name="text" placeholder="Enter a news headline, social media post, or claim to analyze..."></textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">🔍 Run Analysis</button>
+      </form>
+    </div>
+
+    <div id="loader">
+      <div class="spinner"></div>
+      <p id="loader-text" style="color:#64748b; font-weight:600; margin-top:10px;">Analysing...</p>
+    </div>
+
+    <!-- RESULTS SECTION -->
+    <div id="results">
+      <!-- 1. Top Verdict Block -->
+      <div class="white-card verdict-block">
+        <h3 class="section-title">⚠️ Analysis Results</h3>
+        <div class="verdict-layout">
+          <div class="verdict-left">
+            <div id="verdict-main" class="verdict-main">❌ Fake News</div>
+            <div class="conf-row">
+              Confidence Score <strong id="conf-val" style="font-size: 1.4rem;"></strong>
+            </div>
+            <div class="sent-row">
+              Sentiment <strong id="sent-val"></strong>
+            </div>
+            
+            <div class="why-flagged">
+              <h4>Why this was flagged</h4>
+              <ul id="flag-reasons"></ul>
+            </div>
+          </div>
+          <div class="verdict-right">
+            <!-- Simulated "media" box or preview -->
+            <div class="media-preview" id="media-preview">
+              <img id="preview-img" style="display:none;" />
+              <div id="preview-placeholder">Media Preview</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Web Fact Check -->
+      <div class="white-card">
+        <h3 class="section-title">🌐 Web Fact-Check</h3>
+        <div id="rag-alert" class="alert-box"></div>
+        <p id="rag-summary" class="summary-text"></p>
+        <button class="btn-secondary">📄 Download Evidence Card</button>
+      </div>
+
+      <!-- 3. Explainable AI Block -->
+      <div class="dark-card">
+        <h3 style="color:#fff; font-size:1.2rem; margin-bottom:5px;">🧠 Explainable AI — Why This Verdict?</h3>
+        <p style="color:#cbd5e1; font-size:0.9rem;">Our AI doesn't just give a verdict — it shows its reasoning so you can decide whether to trust it.</p>
+      </div>
+
+      <!-- STEP 1: Word Influence -->
+      <div class="white-card">
+        <h3 class="step-title"><span class="step-badge">STEP 1</span> 🔤 Word Influence <span style="color:#94a3b8;font-weight:400;">— Integrated Gradients Attribution</span></h3>
+        <p class="summary-text" style="margin-bottom:1rem;">Each word is scored by how much it pushed the AI toward <strong style="color:#dc2626;">fake</strong> (red) or <strong style="color:#16a34a;">real</strong> (green).</p>
+        <div id="word-pills" class="word-container"></div>
+      </div>
+
+      <!-- STEP 2: Root Causes -->
+      <div class="white-card" style="border-left: 4px solid #3b82f6;">
+        <h3 class="step-title"><span class="step-badge">STEP 2</span> 🔍 Root Causes <span style="color:#94a3b8;font-weight:400;">— Why was this flagged?</span></h3>
+        <div id="root-causes-list" class="alert-box alert-blue"></div>
+      </div>
+
+      <!-- STEP 3: Counterfactuals -->
+      <div class="white-card">
+        <h3 class="step-title"><span class="step-badge">STEP 3</span> 🔄 What Would Change the Verdict? <span style="color:#94a3b8;font-weight:400;">— Counterfactual Analysis</span></h3>
+        <p class="summary-text" style="margin-bottom:1rem;">We simulate "what if" scenarios by removing one signal at a time and re-running the AI to see if the verdict flips.</p>
+        <div id="cf-list"></div>
+      </div>
+
+      <div style="text-align: center; margin-top: 3rem;">
+        <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">AI-powered misinformation detection system for text and image analysis</p>
+        <p style="color: #94a3b8; font-size: 0.8rem;">Analysis completed in <span id="time-taken"></span>s</p>
+        <button onclick="resetApp()" class="btn-primary" style="margin-top: 2rem; max-width: 300px;">Analyze Another</button>
+      </div>
+
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
