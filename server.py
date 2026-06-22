@@ -289,6 +289,16 @@ def get_history():
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+from fastapi.responses import FileResponse
+
+@app.get("/health")
+def health_check():
+    return JSONResponse({"status": "ok"})
+
+@app.get("/")
+def read_root():
+    return FileResponse("static/index.html")
+
 # Mount the static frontend directory to the root
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
