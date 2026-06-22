@@ -22,10 +22,11 @@ document.getElementById('analyze-form').addEventListener('submit', async (e) => 
   e.preventDefault();
   
   const textVal = document.getElementById('text').value;
+  const urlVal = document.getElementById('news-url').value;
   const imageFile = document.getElementById('image').files[0];
   
-  if (!textVal.trim() && !imageFile) {
-    alert("Please provide either text or an image to analyze.");
+  if (!textVal.trim() && !urlVal.trim() && !imageFile) {
+    alert("Please provide text, a URL, or an image to analyze.");
     return;
   }
 
@@ -36,6 +37,7 @@ document.getElementById('analyze-form').addEventListener('submit', async (e) => 
   startTime = Date.now();
   const formData = new FormData();
   formData.append('text', textVal);
+  formData.append('url', urlVal);
   if (imageFile) formData.append('image', imageFile);
 
   try {

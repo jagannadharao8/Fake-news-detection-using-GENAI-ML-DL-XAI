@@ -166,8 +166,39 @@ from src.xai.text import explain_text
 from src.xai.card_builder import build_evidence_card
 from src.xai.counterfactuals import run_counterfactuals
 
+def translate_to_english(input_text: str) -> str:
+    if not input_text.strip(): return input_text
+    try:
+        from google import genai
+        client = genai.Client()
+        prompt = "Translate the following text to English. If it is already in English, return the original text without any translation or introductory remarks. ONLY output the English text:\n\n" + input_text[:3000]
+        response = client.models.generate_content(
+            model='gemini-3.5-flash',
+            contents=prompt,
+        )
+        if response and response.text:
+            return response.text.strip()
+    except Exception as e:
+        print("Gemini translation error, trying Groq...", e)
+        try:
+            api_key = os.environ.get("GROQ_API_KEY")
+            if api_key:
+                from groq import Groq
+                client = Groq(api_key=api_key)
+                response = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[
+                        {"role": "system", "content": "You are a professional translator. Translate the given text to English. If it's already in English, return the original text. Output ONLY the English text without quotes or explanations."},
+                        {"role": "user", "content": input_text[:3000]}
+                    ], max_tokens=1000, temperature=0.1
+                )
+                return response.choices[0].message.content.strip()
+        except Exception as e2:
+            print("Groq translation error:", e2)
+    return input_text
+
 @app.post("/api/analyze")
-async def analyze_endpoint(text: str = Form(""), image: UploadFile = File(None)):
+async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: UploadFile = File(None)):
     import time
     image_path = None
     
@@ -189,6 +220,27 @@ async def analyze_endpoint(text: str = Form(""), image: UploadFile = File(None))
             tmp.write(content)
             tmp.close()
             image_path = tmp.name
+
+    # Scrape URL if provided
+    if url.strip():
+        import requests
+        from bs4 import BeautifulSoup
+        try:
+            resp = requests.get(url.strip(), headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+            soup = BeautifulSoup(resp.content, 'html.parser')
+            title = soup.find('h1')
+            title_text = title.get_text(strip=True) if title else (soup.title.get_text(strip=True) if soup.title else "")
+            paragraphs = soup.find_all('p')
+            body_text = " ".join([p.get_text(strip=True) for p in paragraphs])
+            
+            scraped_content = f"{title_text}\n{body_text}".strip()
+            text = text + "\n" + scraped_content if text else scraped_content
+        except Exception as e:
+            print("Scraping error:", e)
+
+    # Translate text to English if needed
+    if text.strip():
+        text = translate_to_english(text)
 
     # 1. RoBERTa (Text base)
     rob_probs = roberta_predict(text)
