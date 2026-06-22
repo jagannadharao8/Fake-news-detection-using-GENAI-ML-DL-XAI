@@ -19,4 +19,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push --force https://jagannadharao8:$HF_TOKEN@huggingface.co/spaces/jagannadharao8/fake-news-detection main
+          pip install huggingface_hub
+          python -c "from huggingface_hub import HfApi; import os; api = HfApi(token=os.environ['HF_TOKEN']); api.upload_folder(folder_path='.', repo_id='jagannadharao8/fake-news-detection', repo_type='space', ignore_patterns=['.git/*', '.github/*', 'venv/*', '__pycache__/*'])"
