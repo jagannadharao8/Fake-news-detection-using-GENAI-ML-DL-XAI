@@ -10,7 +10,7 @@ app_port: 7860
 
 A state-of-the-art multimodal fake news detection system that combines **local ML models** for fast linguistic text analysis with **cutting-edge Cloud AI APIs** for image consistency and live internet fact-checking. 
 
-The system accepts a news post (text + optional image) and classifies it as **Fake**, **Real**, or **Uncertain**, providing a human-readable explanation of exactly how it arrived at its verdict.
+The system accepts a news post (text, URL, or image) in **any language** and classifies it as **Fake**, **Real**, or **Uncertain**, providing a human-readable explanation of exactly how it arrived at its verdict.
 
 ---
 
@@ -21,6 +21,7 @@ This project uses a hybrid architecture to balance speed, cost, and intelligence
 1. **Text Analysis (Local ML):** A 500MB **RoBERTa-base** model fine-tuned on the LIAR dataset runs locally to detect linguistic patterns of deception.
 2. **Vision-Language Analysis (Cloud):** Uses **Google Gemini 3.5 Flash** to cross-reference uploaded images with the news text, detecting out-of-context or manipulated images.
 3. **Live Web Fact-Checking / RAG (Cloud):** Uses **Serper** to scour the live internet for breaking news evidence, and uses **Groq (Llama-3.1)** to instantly analyze whether the internet evidence supports or contradicts the user's claim.
+4. **Auto-Translation & URL Scraping:** Automatically detects and translates content from languages like Hindi and Telugu into English using Gemini, and effortlessly scrapes full articles directly from a pasted URL.
 
 ---
 
