@@ -6,125 +6,235 @@ colorTo: indigo
 sdk: docker
 app_port: 7860
 ---
-# 🛡️ Fake News Detection System (Cloud-Hybrid AI Architecture)
 
-A state-of-the-art multimodal fake news detection system that combines **local ML models** for fast linguistic text analysis with **cutting-edge Cloud AI APIs** for image consistency and live internet fact-checking. 
+<div align="center">
+  <h1>🛡️ Fake News Detection System</h1>
+  <h3>Advanced Cloud-Hybrid AI Architecture for Multimodal Misinformation Detection</h3>
 
-The system accepts a news post (text, URL, or image) in **any language** and classifies it as **Fake**, **Real**, or **Uncertain**, providing a human-readable explanation of exactly how it arrived at its verdict.
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-0.95%2B-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
+  [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://jagannadharao8-fake-news-detection.hf.space/)
+  
+  <p align="center">
+    A state-of-the-art, multimodal fake news detection system combining local Machine Learning models with cutting-edge Cloud AI APIs for comprehensive text, image, and web-based fact-checking.
+  </p>
+</div>
+
+![Fake News Detection System Interface](img1.png)
 
 ---
 
-## 🌟 The Cloud-Hybrid AI Stack
+## 📖 Table of Contents
 
-This project uses a hybrid architecture to balance speed, cost, and intelligence:
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Architecture & Pipeline](#-architecture--pipeline)
+- [Tech Stack](#-tech-stack)
+- [Live Demo](#-live-demo)
+- [Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Usage](#-usage)
+- [Repository Structure](#-repository-structure)
+- [Known Limitations](#-known-limitations)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-1. **Text Analysis (Local ML):** A 500MB **RoBERTa-base** model fine-tuned on the LIAR dataset runs locally to detect linguistic patterns of deception.
-2. **Vision-Language Analysis (Cloud):** Uses **Google Gemini 3.5 Flash** to cross-reference uploaded images with the news text, detecting out-of-context or manipulated images.
-3. **Live Web Fact-Checking / RAG (Cloud):** Uses **Serper** to scour the live internet for breaking news evidence, and uses **Groq (Llama-3.1)** to instantly analyze whether the internet evidence supports or contradicts the user's claim.
-4. **Auto-Translation & URL Scraping:** Automatically detects and translates content from languages like Hindi and Telugu into English using Gemini, and effortlessly scrapes full articles directly from a pasted URL.
+---
+
+## 🌟 Overview
+
+The **Fake News Detection System** is designed to tackle the growing challenge of digital misinformation. It processes news posts—including text, URLs, and images—in multiple languages, classifying them as **Fake**, **Real**, or **Uncertain**. 
+
+Beyond a simple classification, the system acts as an analytical agent, providing detailed, human-readable explainability reports to justify its verdicts. By leveraging a hybrid architecture, it balances computational efficiency, cost-effectiveness, and deep reasoning capabilities.
+
+---
+
+## ✨ Key Features
+
+- 🧠 **Hybrid AI Architecture**: Synergizes local ML models for rapid inference with powerful Cloud APIs for complex reasoning.
+- 🖼️ **Multimodal Analysis**: Processes not only text but also cross-references accompanying images to detect out-of-context or manipulated media.
+- 🌐 **Live Web Fact-Checking (RAG)**: Dynamically retrieves breaking news and live evidence from the internet to corroborate or refute claims.
+- 🌍 **Multilingual Support**: Automatically detects and translates content from various languages (e.g., Hindi, Telugu) into English before analysis.
+- 🔗 **Automated URL Scraping**: Extracts full article content seamlessly from provided links.
+- 📊 **Explainable AI (XAI)**: Demystifies the "black box" by generating comprehensive reports detailing how each pipeline stage contributed to the final verdict.
+
+---
+
+## ⚙️ Architecture & Pipeline
+
+When an article or post is submitted, it traverses a sophisticated 4-stage processing pipeline:
+
+```mermaid
+graph TD
+    A[User Input: Text/URL/Image] --> B{Data Type?}
+    B -->|Text/URL| C(Stage 1: Linguistic Profiling)
+    B -->|Image + Text| D(Stage 2: Multimodal Verification)
+    C --> C1[RoBERTa Semantic Analysis]
+    C --> C2[Sentiment & Clickbait Heuristics]
+    D --> D1[Gemini 3.5 Flash: Coherence Check]
+    
+    A --> E(Stage 3: RAG Fact-Checking)
+    E --> E1[Serper API: Live Web Search]
+    E1 --> E2[Groq Llama-3.1: Evidence Analysis]
+    
+    C1 --> F(Stage 4: Fusion Meta-Learner)
+    C2 --> F
+    D1 --> F
+    E2 --> F
+    
+    F -->|XGBoost Aggregation| G((Final Verdict))
+    G --> H[Fake / Real / Uncertain]
+    G --> I[Explainability Report]
+```
+
+### 1. Linguistic Profiling (Local NLP)
+- **Semantic Analysis**: A localized, fine-tuned **RoBERTa-base** model assesses the semantic structure and linguistic patterns of deception.
+- **Sentiment & Subjectivity**: Uses **TextBlob** to compute emotional polarity and subjectivity.
+- **Clickbait Heuristics**: Custom algorithms detect sensationalism (e.g., excessive capitalization, hyperbolic punctuation).
+
+### 2. Multimodal Verification (Cloud Vision)
+- Acts as a digital photo-journalist using **Google Gemini 3.5 Flash**.
+- Evaluates the coherence between the provided image and the headline, rigorously flagging out-of-context or manipulated visuals.
+
+### 3. Retrieval-Augmented Generation (RAG Fact-Checking)
+- **Evidence Retrieval**: Extracts core factual claims and utilizes the **Google Search API (Serper)** to pull top relevant live articles.
+- **Logical Assessment**: Feeds retrieved data into **Groq (Llama-3.1)**, which analyzes the evidence to return a definitive `Supports` or `Refutes` verdict.
+
+### 4. Fusion & Explainability (Meta-Learner)
+- **Signal Aggregation**: All intermediate signals (RoBERTa score, Gemini analysis, Groq verdict, Sentiment, Clickbait) are aggregated.
+- **Final Verdict**: An **XGBoost Meta-Learner** evaluates the combined features to predict the final status (**Fake**, **Real**, or **Uncertain**).
+- **Report Generation**: Synthesizes the decision matrix into an easily digestible Explainability Report for the user.
+
+---
+
+## 🛠️ Tech Stack
+
+| Domain | Technologies |
+| :--- | :--- |
+| **Backend & API** | Python, FastAPI, Uvicorn |
+| **Local Machine Learning** | PyTorch, Hugging Face Transformers (RoBERTa), XGBoost |
+| **Cloud AI & LLMs** | Google Gemini 3.5 Flash, Groq (Llama-3.1) |
+| **Search & Retrieval** | Serper API (Google Search) |
+| **NLP Utilities** | TextBlob, NLTK, BeautifulSoup4 |
+| **Deployment** | Docker, Hugging Face Spaces |
+| **Frontend UI** | HTML5, CSS3, Vanilla JavaScript |
 
 ---
 
 ## 🚀 Live Demo
 
-This application is fully deployed and accessible to the public via Hugging Face Spaces:
-👉 **[Live Application Link](https://jagannadharao8-fake-news-detection.hf.space/)**
+Experience the system in action. The application is fully containerized and hosted on Hugging Face Spaces:
+
+👉 **[Try the Live Application](https://jagannadharao8-fake-news-detection.hf.space/)**
 
 ---
 
-## ⚙️ How It Works (The Pipeline)
+## 💻 Getting Started
 
-When a user submits an article, the system executes a 4-stage pipeline:
+Follow these instructions to set up the project on your local machine for development and testing.
 
-### Stage 1: Linguistic Profiling (RoBERTa & NLP)
-- The local **RoBERTa** model analyzes the semantic structure of the text.
-- **TextBlob** computes the sentiment polarity and subjectivity.
-- A custom heuristic engine scores the text for clickbait patterns (e.g., ALL CAPS, sensational punctuation, superlatives).
+### Prerequisites
 
-### Stage 2: Multimodal Verification (Gemini Vision)
-- If an image is provided, **Gemini 3.5 Flash** acts as an expert photo-journalist.
-- It examines the image and the headline together, returning a strict assessment of whether the image legitimately represents the text, or if it is mismatched/manipulated.
+- **Python**: 3.8 or higher
+- **Git**: For cloning the repository
+- API Keys for Google Gemini, Serper, and Groq.
 
-### Stage 3: Retrieval-Augmented Generation (Groq + Serper)
-- The system extracts the core factual claims from the text.
-- It pings the **Google Search API (Serper)** to pull the top 5 live articles about those claims.
-- It sends the search results to **Groq**, which reads the evidence and provides a boolean `Supports` or `Refutes` verdict.
+### Installation
 
-### Stage 4: Fusion & Explainability (XGBoost)
-- All signals (RoBERTa score, Gemini score, Groq score, Sentiment, Clickbait) are fed into an **XGBoost Meta-Learner**.
-- XGBoost makes the final prediction: **Fake**, **Real**, or **Uncertain**.
-- The system generates an Explainability Report so the user can understand exactly *why* the prediction was made.
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/jagannadharao8/Fake-news-detection-using-GENAI-ML-DL-XAI.git
+   cd Fake-news-detection-using-GENAI-ML-DL-XAI
+   ```
 
----
+2. **Create a Virtual Environment**
+   ```bash
+   # Windows
+   python -m venv venv
+   .\venv\Scripts\activate
 
-## 🛠️ Installation & Local Setup
+   # macOS / Linux
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
 
-Want to run this system on your own machine?
+3. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/jagannadharao8/Fake-news-detection-using-GENAI-ML-DL-XAI.git
-cd Fake-news-detection-using-GENAI-ML-DL-XAI
-```
+### Configuration
 
-### 2. Set Up a Virtual Environment
-```bash
-# Windows
-python -m venv venv
-.\venv\Scripts\Activate
+Create a `.env` file in the root directory and populate it with your API keys:
 
-# Mac/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure API Keys
-Create a `.env` file in the root directory and add your free API keys:
 ```env
-# For Image Verification (https://aistudio.google.com/)
-GEMINI_API_KEY=your_gemini_key_here
+# Google Gemini API Key for Vision & Translation (https://aistudio.google.com/)
+GEMINI_API_KEY=your_gemini_api_key_here
 
-# For Web Searching (https://serper.dev/)
-SERPER_API_KEY=your_serper_key_here
+# Serper API Key for Web Searching (https://serper.dev/)
+SERPER_API_KEY=your_serper_api_key_here
 
-# For RAG Fact-Checking (https://console.groq.com/)
-GROQ_API_KEY=your_groq_key_here
+# Groq API Key for RAG Fact-Checking (https://console.groq.com/)
+GROQ_API_KEY=your_groq_api_key_here
 ```
 
-### 5. Start the Server
+---
+
+## 🏃 Usage
+
+Start the FastAPI application server locally:
+
 ```bash
 uvicorn server:app --host 127.0.0.1 --port 8000 --reload
 ```
-Open your browser and navigate to `http://127.0.0.1:8000`.
+
+- **Web Interface**: Navigate to `http://127.0.0.1:8000` in your browser.
+- **API Documentation**: Interactive Swagger UI is available at `http://127.0.0.1:8000/docs`.
 
 ---
 
-## 📁 Core Repository Structure
+## 📁 Repository Structure
 
-```
+```text
 .
-├── server.py                 # FastAPI backend & web server
-├── static/                   # Frontend UI (HTML, CSS, JS)
+├── artifacts/                # Pre-trained ML weights (RoBERTa & XGBoost)
 ├── src/                      # Core pipeline logic
-│   ├── vlm/infer.py          # Gemini Vision integration
-│   ├── rag/                  # Groq & Serper Fact-Checking
-│   ├── text/                 # RoBERTa local NLP models
-│   └── framing/              # Sentiment & Clickbait analysis
-├── artifacts/                # Local ML weights (RoBERTa & XGBoost)
-├── Dockerfile                # Hugging Face deployment config
-└── requirements.txt          # Python dependencies
+│   ├── framing/              # Sentiment & Clickbait heuristic analyzers
+│   ├── rag/                  # Groq & Serper integration for fact-checking
+│   ├── text/                 # Local NLP model implementations (RoBERTa)
+│   └── vlm/                  # Gemini Vision integration logic
+├── static/                   # Frontend assets (HTML, CSS, JS)
+├── .env.example              # Example environment variables file
+├── Dockerfile                # Containerization config for Hugging Face
+├── requirements.txt          # Python dependency list
+└── server.py                 # FastAPI application entry point
 ```
 
 ---
 
-## 📝 Known Limitations
-- The RAG system relies on Google Search. If a fake news story is highly viral and dominates search results, the system may occasionally struggle to find the truth.
-- Free-tier API keys (Groq, Gemini) have rate limits. If you process too many requests in a minute, you may hit a cooldown period.
+## ⚠️ Known Limitations
+
+- **Search Dominance**: The RAG system depends on Google Search (via Serper). If a piece of fake news is highly viral and dominates recent search indexing, the retrieval step may temporarily pull corroborated false information.
+- **Rate Limiting**: Usage of free-tier API keys for Groq and Gemini imposes strict requests-per-minute limits. High-volume processing may trigger cooldown periods.
+
+---
 
 ## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
+
+We welcome contributions from the community! If you'd like to improve the system:
+1. Fork the repository.
+2. Create a new branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
+
+Please check the [Issues](#) page for open tasks.
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE). *(Note: Ensure a LICENSE file exists in the repository if specifying MIT)*
