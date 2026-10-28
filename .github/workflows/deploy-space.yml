@@ -1,0 +1,45 @@
+name: Deploy verified evidence assistant
+on:
+  push:
+    branches: [fix/portfolio-reliability-20261028]
+    paths: [.github/workflows/deploy-space.yml]
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install huggingface_hub
+      - name: Publish only application files to the existing Space
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from huggingface_hub import HfApi
+          token = os.getenv("HF_TOKEN")
+          if not token:
+              raise SystemExit("Deployment blocked: configure a write-scoped HF_TOKEN repository secret. Never paste it into chat.")
+          api = HfApi(token=token)
+          account = api.whoami()
+          if account.get("name") != "jagannadharao8":
+              raise SystemExit("Token belongs to a different Hugging Face account; deployment stopped.")
+          # Space metadata must survive the GitHub README replacement.
+          readme = Path("README.md")
+          original = readme.read_text()
+          readme.write_text("---\ntitle: Fake News Detection System\nemoji: 🛡️\ncolorFrom: blue\ncolorTo: indigo\nsdk: docker\napp_port: 7860\n---\n\n" + original)
+          api.upload_folder(
+              repo_id="jagannadharao8/fake-news-detection",
+              repo_type="space", folder_path=".",
+              allow_patterns=["server.py", "src/**", "static/**", "Dockerfile", "requirements.txt", "README.md"],
+              commit_message="Deploy verified uncertainty and evidence-policy corrections")
+          print("Application uploaded; existing model artifacts and private Space settings were preserved.")
+          PY
