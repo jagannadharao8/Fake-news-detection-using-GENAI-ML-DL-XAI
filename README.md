@@ -18,7 +18,13 @@ Model artifacts are downloaded from the existing Hugging Face Space during setup
 ## Supported inputs and privacy
 Paste text or upload an image/PDF up to 10 MB. URL fetching is disabled; paste article text instead. Shared public history is disabled and new submissions are not persisted by this API. Existing history.db files are not deleted by this change. Delete historical data separately through the hosting service if required.
 
-## Verification still needed
-Offline tests cover the decision policy and card agreement. Test the full deployed API with real artifacts and provider credentials before merging. Check document/image handling, provider failures and attribution rendering. Retrieval uses snippets and may miss or repeat misinformation. Model output requires manual source review.
+## Verification and limits
+[Live demonstration](https://jagannadharao8-fake-news-detection.hf.space/).
+On 28 October 2026, the deployed API returned HTTP 200 with matching Uncertain verdict and evidence-card label for a synthetic unsupported claim, with no confidence percentage. Empty input, URL fetching and a malformed PDF returned HTTP 400; public history returned HTTP 410. [Live check evidence](https://github.com/jagannadharao8/jagannadharao8.github.io/actions/runs/40711305705) (its separate research-app check failed; the fake-news checks passed).
+
+Fifteen offline policy/API tests cover decision consistency and mocked provider failures. A text-path smoke is not full multimodal validation: image interpretation, provider-specific failures and attribution quality still need review. Retrieval uses snippets and may miss or repeat misinformation. Model output requires manual source review.
+
+## Deployment
+GitHub Actions uploads the runtime server, src and static files to the existing Hugging Face Space. It adds the Docker SDK metadata to the remote README and preserves remote model artifacts and private settings. The root app.py, browser extension and fusion modules are legacy experiments; server.py is the deployed application entry point.
 
 MIT licensed educational application.
