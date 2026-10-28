@@ -12,10 +12,8 @@
   <div class="app-header">
     <div class="header-badge">🛡️ AI-POWERED</div>
     <h1>Fake News Detector</h1>
-    <p>Paste any news headline, social media post, or claim. Our AI analyses<br>text, image, sentiment, and writing style to detect misinformation instantly.</p>
-    <div style="text-align:center; margin-bottom: 2rem;">
-      <a href="history.html" style="color: rgba(255,255,255,0.9); text-decoration: underline; font-weight: 500;">📊 View Analysis History</a>
-    </div>
+    <p>Paste any news headline, social media post, or claim. Our AI analyses<br>text, image, sentiment, and writing style to assist manual verification.</p>
+
   </div>
 
   <div class="container">
@@ -28,7 +26,7 @@
             <div class="file-upload">
               <span class="upload-btn">↑ Browse files</span>
               <span id="file-name" style="margin-top: 1rem; font-size: 0.9rem; color: #475569;">Drag and drop file here</span>
-              <div class="file-desc" style="margin-top: 0.5rem;">Limit 200MB • JPG, PNG, PDF</div>
+              <div class="file-desc" style="margin-top: 0.5rem;">Limit 10MB • JPG, PNG, PDF</div>
               <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/webp, application/pdf">
             </div>
           </div>
@@ -39,7 +37,7 @@
             <textarea id="text" name="text" placeholder="Enter a news headline, social media post, or claim to analyze..." style="margin-bottom: 1rem; height: 100px;"></textarea>
             
             <label>🔗 Or Paste an Article URL</label>
-            <input type="url" id="news-url" name="url" placeholder="https://example.com/news-article..." style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit; margin-top: 0.25rem;">
+            <input disabled type="url" id="news-url" name="url" placeholder="URL fetching disabled; paste article text above." style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-family: inherit; margin-top: 0.25rem;">
           </div>
         </div>
 
@@ -61,7 +59,7 @@
           <div class="verdict-left">
             <div id="verdict-main" class="verdict-main">❌ Fake News</div>
             <div class="conf-row">
-              Confidence Score <strong id="conf-val" style="font-size: 1.4rem;"></strong>
+              Evidence signal (uncalibrated) <strong id="conf-val" style="font-size: 1.4rem;"></strong>
             </div>
             <div class="sent-row">
               Sentiment <strong id="sent-val"></strong>

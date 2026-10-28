@@ -140,31 +140,9 @@ def live_rag_check(text: str) -> dict:
         print("RAG Error:", e)
         return _FALLBACK
 
-def combined_verdict(r_probs, rag_result, standalone_result, image_mode):
-    fake_prob = r_probs.get("fake", 0.5)
-    if image_mode == "image_only" and standalone_result.get("available"):
-        fake_prob = standalone_result.get("fake_score", 0.5) * 0.65 + fake_prob * 0.35
-        
-    if rag_result.get("available"):
-        web_verdict = rag_result.get("verdict", "unverifiable")
-        if web_verdict == "supported":
-            fake_prob *= (0.25 + 0.20 * (1.0 - rag_result.get("rag_support", 0.33)))
-        elif web_verdict == "contradicted":
-            fake_prob += (1.0 - fake_prob) * (0.35 * max(rag_result.get("rag_contradict", 0.33), 0.5))
-        elif web_verdict == "mixed":
-            fake_prob *= 0.85
-            
-    fake_prob = max(0.0, min(1.0, fake_prob))
-    real_prob = 1.0 - fake_prob
-    if fake_prob > 0.60: return "Fake", fake_prob
-    if real_prob > 0.60: return "Real", real_prob
-    if fake_prob > 0.40 and fake_prob >= real_prob: return "Fake", fake_prob
-    if real_prob > 0.40: return "Real", real_prob
-    return "Uncertain", max(fake_prob, real_prob)
+from src.decision import decide, evidence_card
 
 from src.xai.text import explain_text
-from src.xai.card_builder import build_evidence_card
-from src.xai.counterfactuals import run_counterfactuals
 
 def translate_to_english(input_text: str) -> str:
     if not input_text.strip(): return input_text
@@ -200,6 +178,10 @@ def translate_to_english(input_text: str) -> str:
 @app.post("/api/analyze")
 async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: UploadFile = File(None)):
     import time
+    if url.strip():
+        raise HTTPException(status_code=400, detail="URL fetching is disabled; paste article text instead.")
+    if not text.strip() and not (image and image.filename):
+        raise HTTPException(status_code=400, detail="Provide text or an image/document.")
     image_path = None
     
     # Check if a PDF was uploaded
@@ -207,16 +189,20 @@ async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: Upl
         filename = image.filename.lower()
         if filename.endswith(".pdf"):
             # Extract PDF text
-            content = await image.read()
+            content = await image.read(10 * 1024 * 1024 + 1)
+            if len(content) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Maximum upload size is 10 MB.")
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
             extracted_text = ""
             for page in pdf_reader.pages:
-                extracted_text += page.extract_text() + "\n"
+                extracted_text += (page.extract_text() or "") + "\n"
             text = text + "\n" + extracted_text if text else extracted_text
         else:
             # It's an image
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            content = await image.read()
+            content = await image.read(10 * 1024 * 1024 + 1)
+            if len(content) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Maximum upload size is 10 MB.")
             tmp.write(content)
             tmp.close()
             image_path = tmp.name
@@ -263,7 +249,8 @@ async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: Upl
     
     # 5. Final Verdict blending
     mode = "image_only" if (image_path and not text.strip()) else "text_image"
-    final_label, conf = combined_verdict(rob_probs, rag, standalone_result, mode)
+    decision = decide(rob_probs, rag, vlm_result, bool(image_path))
+    final_label, conf = decision["label"], decision["score"]
     
     # 6. XAI Features
     features = {
@@ -287,38 +274,16 @@ async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: Upl
         except Exception:
             pass
             
-    card = {}
-    try:
-        card = build_evidence_card({
-            "id": f"live_{int(time.time())}",
-            "image_path": image_path,
-            "post_text" : text,
-            "features"  : features,
-        })
-    except Exception as e:
-        print("Card error:", e)
+    card = evidence_card(decision, rob_probs, rag, vlm_result, bool(image_path))
     
     if image_path:
         os.remove(image_path)
         
-    # Save to history database
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        dt_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_text = text[:500] + "..." if len(text) > 500 else text
-        if not save_text and image: save_text = f"[Image/Document: {image.filename}]"
-        
-        cursor.execute("INSERT INTO history (timestamp, text, verdict, confidence) VALUES (?, ?, ?, ?)",
-                       (dt_str, save_text, final_label, conf * 100))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print("DB Error:", e)
-
+    # Do not persist submitted text in shared public history.
     return JSONResponse({
         "verdict": final_label,
-        "confidence": round(conf * 100, 1),
+        "confidence": round(conf * 100, 1) if conf is not None else None,
+        "score_type": "uncalibrated evidence heuristic",
         "roberta": rob_probs,
         "rag": rag,
         "vision": vlm_result if text.strip() else standalone_result,
@@ -330,16 +295,7 @@ async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: Upl
 
 @app.get("/api/history")
 def get_history():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM history ORDER BY id DESC LIMIT 50")
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    raise HTTPException(status_code=410, detail="Shared analysis history is disabled for privacy.")
 
 from fastapi.responses import FileResponse
 
