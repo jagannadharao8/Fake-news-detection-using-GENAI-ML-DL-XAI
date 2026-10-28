@@ -46,12 +46,12 @@ def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
         from google.genai import types
         
         # Pulls GEMINI_API_KEY from environment
-        client = genai.Client()
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         img = Image.open(image_path).convert("RGB")
         
         response = client.models.generate_content(
-            model='gemini-3.5-flash',
+            model=os.environ.get('GEMINI_MODEL', 'gemini-3.6-flash'),
             contents=[img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -79,7 +79,7 @@ def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
         )
         return json.loads(response.text)
     except Exception as e:
-        log.warning("Gemini VLM call failed: %s", e)
+        log.warning("Gemini VLM call failed (status=%s)", getattr(e, "code", getattr(e, "status_code", "unknown")))
         return None
 
 def predict_consistency(
