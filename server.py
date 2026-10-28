@@ -45,32 +45,12 @@ from src.framing.clickbait import clickbait_score
 from src.rag.claims import extract_claims
 from src.rag.retrieve import retrieve
 
-# Initialize Database
-DB_PATH = "history.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            text TEXT,
-            verdict TEXT,
-            confidence REAL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
 app = FastAPI(title="Fake News Detector API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -120,9 +100,9 @@ def live_rag_check(text: str) -> dict:
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key: return _FALLBACK
         from groq import Groq
-        client = Groq(api_key=api_key)
+        client = Groq(api_key=api_key, timeout=45, max_retries=1)
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[
                 {"role": "system", "content": "You are a precise fact-checking assistant. Return ONLY valid JSON. Start your response with { and end with }."},
                 {"role": "user", "content": prompt}
@@ -140,31 +120,9 @@ def live_rag_check(text: str) -> dict:
         print("RAG Error:", e)
         return _FALLBACK
 
-def combined_verdict(r_probs, rag_result, standalone_result, image_mode):
-    fake_prob = r_probs.get("fake", 0.5)
-    if image_mode == "image_only" and standalone_result.get("available"):
-        fake_prob = standalone_result.get("fake_score", 0.5) * 0.65 + fake_prob * 0.35
-        
-    if rag_result.get("available"):
-        web_verdict = rag_result.get("verdict", "unverifiable")
-        if web_verdict == "supported":
-            fake_prob *= (0.25 + 0.20 * (1.0 - rag_result.get("rag_support", 0.33)))
-        elif web_verdict == "contradicted":
-            fake_prob += (1.0 - fake_prob) * (0.35 * max(rag_result.get("rag_contradict", 0.33), 0.5))
-        elif web_verdict == "mixed":
-            fake_prob *= 0.85
-            
-    fake_prob = max(0.0, min(1.0, fake_prob))
-    real_prob = 1.0 - fake_prob
-    if fake_prob > 0.60: return "Fake", fake_prob
-    if real_prob > 0.60: return "Real", real_prob
-    if fake_prob > 0.40 and fake_prob >= real_prob: return "Fake", fake_prob
-    if real_prob > 0.40: return "Real", real_prob
-    return "Uncertain", max(fake_prob, real_prob)
+from src.decision import decide, evidence_card
 
 from src.xai.text import explain_text
-from src.xai.card_builder import build_evidence_card
-from src.xai.counterfactuals import run_counterfactuals
 
 def translate_to_english(input_text: str) -> str:
     if not input_text.strip(): return input_text
@@ -173,7 +131,7 @@ def translate_to_english(input_text: str) -> str:
         client = genai.Client()
         prompt = "Translate the following text to English. If it is already in English, return the original text without any translation or introductory remarks. ONLY output the English text:\n\n" + input_text[:3000]
         response = client.models.generate_content(
-            model='gemini-3.5-flash',
+            model=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash'),
             contents=prompt,
         )
         if response and response.text:
@@ -184,9 +142,9 @@ def translate_to_english(input_text: str) -> str:
             api_key = os.environ.get("GROQ_API_KEY")
             if api_key:
                 from groq import Groq
-                client = Groq(api_key=api_key)
+                client = Groq(api_key=api_key, timeout=45, max_retries=1)
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
                     messages=[
                         {"role": "system", "content": "You are a professional translator. Translate the given text to English. If it's already in English, return the original text. Output ONLY the English text without quotes or explanations."},
                         {"role": "user", "content": input_text[:3000]}
@@ -198,8 +156,12 @@ def translate_to_english(input_text: str) -> str:
     return input_text
 
 @app.post("/api/analyze")
-async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: UploadFile = File(None)):
+def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: UploadFile = File(None)):
     import time
+    if url.strip():
+        raise HTTPException(status_code=400, detail="URL fetching is disabled; paste article text instead.")
+    if not text.strip() and not (image and image.filename):
+        raise HTTPException(status_code=400, detail="Provide text or an image/document.")
     image_path = None
     
     # Check if a PDF was uploaded
@@ -207,139 +169,101 @@ async def analyze_endpoint(text: str = Form(""), url: str = Form(""), image: Upl
         filename = image.filename.lower()
         if filename.endswith(".pdf"):
             # Extract PDF text
-            content = await image.read()
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            content = image.file.read(10 * 1024 * 1024 + 1)
+            if len(content) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Maximum upload size is 10 MB.")
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            except Exception:
+                raise HTTPException(status_code=400, detail="The uploaded PDF could not be read.")
             extracted_text = ""
             for page in pdf_reader.pages:
-                extracted_text += page.extract_text() + "\n"
+                extracted_text += (page.extract_text() or "") + "\n"
             text = text + "\n" + extracted_text if text else extracted_text
         else:
             # It's an image
+            content = image.file.read(10 * 1024 * 1024 + 1)
+            if len(content) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Maximum upload size is 10 MB.")
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            content = await image.read()
             tmp.write(content)
             tmp.close()
             image_path = tmp.name
 
-    # Scrape URL if provided
-    if url.strip():
-        import requests
-        from bs4 import BeautifulSoup
-        try:
-            resp = requests.get(url.strip(), headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-            soup = BeautifulSoup(resp.content, 'html.parser')
-            title = soup.find('h1')
-            title_text = title.get_text(strip=True) if title else (soup.title.get_text(strip=True) if soup.title else "")
-            paragraphs = soup.find_all('p')
-            body_text = " ".join([p.get_text(strip=True) for p in paragraphs])
-            
-            scraped_content = f"{title_text}\n{body_text}".strip()
-            text = text + "\n" + scraped_content if text else scraped_content
-        except Exception as e:
-            print("Scraping error:", e)
-
-    # Translate text to English if needed
-    if text.strip():
-        text = translate_to_english(text)
-
-    # 1. RoBERTa (Text base)
-    rob_probs = roberta_predict(text)
-    
-    # 2. RAG (Web check)
-    rag = live_rag_check(text)
-    
-    # 3. Vision (Gemini)
-    vlm_result = {}
-    standalone_result = {}
-    if image_path:
+    try:
+        # Translate text to English if needed
         if text.strip():
-            vlm_result = predict_consistency(image_path, text)
-        else:
-            standalone_result = predict_standalone(image_path)
+            text = translate_to_english(text)
+    
+        # 1. RoBERTa (Text base)
+        rob_probs = roberta_predict(text)
+        
+        # 2. RAG (Web check)
+        rag = live_rag_check(text)
+        
+        # 3. Vision (Gemini)
+        vlm_result = {}
+        standalone_result = {}
+        if image_path:
+            if text.strip():
+                vlm_result = predict_consistency(image_path, text)
+            else:
+                standalone_result = predict_standalone(image_path)
+                
+        # 4. Sentiment & Clickbait
+        sent = analyze_sentiment(text) if text.strip() else {"sentiment": 0.5, "subjectivity": 0.5}
+        click = clickbait_score(text) if text.strip() else {"clickbait": 0.0}
+        
+        # 5. Final Verdict blending
+        mode = "image_only" if (image_path and not text.strip()) else "text_image"
+        decision = decide(rob_probs, rag, vlm_result, bool(image_path))
+        final_label, conf = decision["label"], decision["score"]
+        
+        # 6. XAI Features
+        features = {
+            "text_cls_score": rob_probs.get("fake", 0.5),
+            "rag_support": rag.get("rag_support", 0.33),
+            "rag_contradict": rag.get("rag_contradict", 0.33),
+            "vlm_consistency": vlm_result.get("consistency_score", 0.5),
+            "vlm_entropy": 1.0 - abs(vlm_result.get("consistency_score", 0.5) - 0.5) * 2.0,
+            "ocr_match": 0.0,
+            "sentiment": sent.get("sentiment", 0.5),
+            "subjectivity": sent.get("subjectivity", 0.5),
+            "clickbait": click.get("clickbait", 0.0),
+            "text_length_norm": min(len(text) / 300.0, 1.0) if text else 0.0,
+            "has_image": 1 if image_path else 0,
+        }
+        
+        xai_data = None
+        if text.strip():
+            try:
+                xai_data = explain_text(text, target_label="fake")
+            except Exception:
+                pass
+                
+        card = evidence_card(decision, rob_probs, rag, vlm_result, bool(image_path))
+        
             
-    # 4. Sentiment & Clickbait
-    sent = analyze_sentiment(text) if text.strip() else {"sentiment": 0.5, "subjectivity": 0.5}
-    click = clickbait_score(text) if text.strip() else {"clickbait": 0.0}
-    
-    # 5. Final Verdict blending
-    mode = "image_only" if (image_path and not text.strip()) else "text_image"
-    final_label, conf = combined_verdict(rob_probs, rag, standalone_result, mode)
-    
-    # 6. XAI Features
-    features = {
-        "text_cls_score": rob_probs.get("fake", 0.5),
-        "rag_support": rag.get("rag_support", 0.33),
-        "rag_contradict": rag.get("rag_contradict", 0.33),
-        "vlm_consistency": vlm_result.get("consistency_score", 0.5),
-        "vlm_entropy": 1.0 - abs(vlm_result.get("consistency_score", 0.5) - 0.5) * 2.0,
-        "ocr_match": 0.0,
-        "sentiment": sent.get("sentiment", 0.5),
-        "subjectivity": sent.get("subjectivity", 0.5),
-        "clickbait": click.get("clickbait", 0.0),
-        "text_length_norm": min(len(text) / 300.0, 1.0) if text else 0.0,
-        "has_image": 1 if image_path else 0,
-    }
-    
-    xai_data = None
-    if text.strip():
-        try:
-            xai_data = explain_text(text, target_label="fake")
-        except Exception:
-            pass
-            
-    card = {}
-    try:
-        card = build_evidence_card({
-            "id": f"live_{int(time.time())}",
-            "image_path": image_path,
-            "post_text" : text,
-            "features"  : features,
+        # Do not persist submitted text in shared public history.
+        return JSONResponse({
+            "verdict": final_label,
+            "confidence": round(conf * 100, 1) if conf is not None else None,
+            "score_type": "uncalibrated evidence heuristic",
+            "roberta": rob_probs,
+            "rag": rag,
+            "vision": vlm_result if text.strip() else standalone_result,
+            "sentiment": sent,
+            "clickbait": click,
+            "xai": xai_data,
+            "card": card
         })
-    except Exception as e:
-        print("Card error:", e)
-    
-    if image_path:
-        os.remove(image_path)
-        
-    # Save to history database
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        dt_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_text = text[:500] + "..." if len(text) > 500 else text
-        if not save_text and image: save_text = f"[Image/Document: {image.filename}]"
-        
-        cursor.execute("INSERT INTO history (timestamp, text, verdict, confidence) VALUES (?, ?, ?, ?)",
-                       (dt_str, save_text, final_label, conf * 100))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print("DB Error:", e)
-
-    return JSONResponse({
-        "verdict": final_label,
-        "confidence": round(conf * 100, 1),
-        "roberta": rob_probs,
-        "rag": rag,
-        "vision": vlm_result if text.strip() else standalone_result,
-        "sentiment": sent,
-        "clickbait": click,
-        "xai": xai_data,
-        "card": card
-    })
+    finally:
+        if image_path and os.path.exists(image_path):
+            os.remove(image_path)
 
 @app.get("/api/history")
 def get_history():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM history ORDER BY id DESC LIMIT 50")
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    raise HTTPException(status_code=410, detail="Shared analysis history is disabled for privacy.")
 
 from fastapi.responses import FileResponse
 

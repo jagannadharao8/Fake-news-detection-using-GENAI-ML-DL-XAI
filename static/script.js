@@ -1,4 +1,11 @@
+function escapeText(value) { return String(value ?? "").replace(/[&<>"\']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","\'":"&#39;"}[c])); }
 let startTime = 0;
+let lastEvidence = null;
+document.querySelector(".btn-secondary").addEventListener("click", () => {
+  if (!lastEvidence) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(lastEvidence, null, 2)], {type:"application/json"}));
+  const a = document.createElement("a"); a.href = url; a.download = "evidence.json"; a.click(); URL.revokeObjectURL(url);
+});
 
 document.getElementById('image').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -52,6 +59,7 @@ document.getElementById('analyze-form').addEventListener('submit', async (e) => 
 });
 
 function renderResults(data) {
+  lastEvidence = data;
   const timeTaken = ((Date.now() - startTime) / 1000).toFixed(2);
   document.getElementById('time-taken').innerText = timeTaken;
 
@@ -74,7 +82,7 @@ function renderResults(data) {
     vMain.classList.add('v-uncertain');
   }
   
-  document.getElementById('conf-val').innerText = `${data.confidence}%`;
+  document.getElementById('conf-val').innerText = data.confidence == null ? "Not assessed" : `${data.confidence}%`;
   
   let sentStr = "Neutral";
   if (data.sentiment) {
@@ -88,10 +96,10 @@ function renderResults(data) {
   const flags = document.getElementById('flag-reasons');
   flags.innerHTML = '';
   if (data.clickbait?.clickbait > 0.5) flags.innerHTML += '<li>The headline uses emotionally charged language designed to create fear or urgency.</li>';
-  if (data.vision?.verdict === 'mismatch') flags.innerHTML += '<li>Despite a matching image, the text contains misleading claims.</li>';
+  if (data.vision?.verdict === 'mismatch') flags.innerHTML += '<li>The supplied image may not match the accompanying text.</li>';
   if (data.rag?.verdict === 'contradicted') flags.innerHTML += '<li>Web sources contradict the claims in this content.</li>';
   if (data.rag?.verdict === 'mixed') flags.innerHTML += '<li>Web sources show mixed signals about the claims in this content.</li>';
-  if (flags.innerHTML === '') flags.innerHTML = '<li style="color:#16a34a;">No major red flags detected.</li>';
+  if (flags.innerHTML === '') flags.innerHTML = '<li style="color:#16a34a;">No conclusive verification; inspect retrieved evidence.</li>';
 
   // 2. RAG
   let ragAlert = "🌐 " + (data.rag?.verdict || "Unverifiable").toUpperCase();
@@ -115,7 +123,7 @@ function renderResults(data) {
       let sign = a > 0 ? '↑' : '';
       wp.innerHTML += `
         <div class="word-pill" style="background:${bg}; border-color:${border};">
-          <span>${t}</span>
+          <span>${escapeText(t)}</span>
           <span class="word-score">${sign}${a.toFixed(3)}</span>
         </div>
       `;
@@ -129,7 +137,7 @@ function renderResults(data) {
   rc.innerHTML = '';
   if (data.card && data.card.causes) {
     for (let c of data.card.causes) {
-      rc.innerHTML += `<div style="margin-bottom:4px;">• ${c.text}</div>`;
+      rc.innerHTML += `<div style="margin-bottom:4px;">• ${escapeText(c.text)}</div>`;
     }
     if (data.card.causes.length === 0) rc.innerHTML = '🤔 No single strong red flag — verdict based on subtle patterns';
   } else {
@@ -152,8 +160,8 @@ function renderResults(data) {
         <div class="cf-card">
           <div class="cf-icon">⚡</div>
           <div class="cf-text">
-            ${text}
-            <strong>→ Verdict would change to ${newV}</strong>
+            ${escapeText(text)}
+            <strong>→ Verdict would change to ${escapeText(newV)}</strong>
           </div>
         </div>
       `;
