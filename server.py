@@ -131,7 +131,7 @@ def translate_to_english(input_text: str) -> str:
         client = genai.Client()
         prompt = "Translate the following text to English. If it is already in English, return the original text without any translation or introductory remarks. ONLY output the English text:\n\n" + input_text[:3000]
         response = client.models.generate_content(
-            model=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash'),
+            model=os.getenv('GEMINI_MODEL', 'gemini-3.6-flash'),
             contents=prompt,
         )
         if response and response.text:

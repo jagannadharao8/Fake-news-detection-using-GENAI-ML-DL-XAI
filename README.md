@@ -13,7 +13,7 @@ pip install -r requirements.txt
 uvicorn server:app --host 127.0.0.1 --port 8000
 python -m unittest discover -s tests -v
 ```
-Model artifacts are downloaded from the existing Hugging Face Space during setup. Configure GROQ_API_KEY, GEMINI_API_KEY and SERPER_API_KEY privately. Model and account availability must be checked on the deployment.
+Model artifacts are downloaded from the existing Hugging Face Space during setup. Configure GROQ_API_KEY, GEMINI_API_KEY and SERPER_API_KEY privately. The vision wrapper explicitly uses GEMINI_API_KEY and respects GEMINI_MODEL (default gemini-3.6-flash); this avoids a different GOOGLE_API_KEY silently taking precedence. Model and account access must be checked on the deployment. Provider failures abstain rather than asserting image authenticity.
 
 ## Supported inputs and privacy
 Paste text or upload an image/PDF up to 10 MB. URL fetching is disabled; paste article text instead. Shared public history is disabled and new submissions are not persisted by this API. Existing history.db files are not deleted by this change. Delete historical data separately through the hosting service if required.

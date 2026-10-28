@@ -14,9 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install fastapi python-multipart httpx uvicorn python-dotenv PyPDF2
+      - run: pip install fastapi python-multipart httpx uvicorn python-dotenv PyPDF2 pillow
       - run: python -m unittest discover -s tests -v
-      - run: python -m py_compile server.py src/decision.py
+      - run: python -m py_compile server.py src/decision.py src/vlm/infer.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
