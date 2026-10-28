@@ -1,0 +1,45 @@
+name: Diagnose vision configuration without exposing credentials
+on:
+  push:
+    branches: [diagnostics/vision-availability-20261028]
+    paths: [.github/workflows/diagnose-vision.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install huggingface_hub
+      - run: |
+          python - <<'PY'
+          import os,json,subprocess
+          from huggingface_hub import HfApi
+          api=HfApi(token=os.environ["HF_TOKEN"])
+          if api.whoami().get("name")!="jagannadharao8":
+              raise SystemExit("Unexpected credential owner.")
+          space="jagannadharao8/fake-news-detection"
+          secrets=api.get_space_secrets(space)
+          variables=api.get_space_variables(space)
+          print(json.dumps({"geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
+              "geminiCredentialAvailableInGithub":bool(os.environ.get("GEMINI_API_KEY")),
+              "runtimeStage":api.get_space_runtime(space).stage}))
+          try:
+              result=subprocess.run(["hf","spaces","logs",space,"-n","100"],capture_output=True,text=True,timeout=35)
+              # Never print raw logs: they may contain user text or provider details.
+              lines=[line.lower() for line in result.stdout.splitlines() if "gemini vlm call failed" in line.lower()]
+              text=" ".join(lines)
+              print(json.dumps({"visionProviderErrorLogged":bool(lines),
+                  "quotaOrRateLimit":any(x in text for x in ["429","resource_exhausted","quota"]),
+                  "credentialRejected":any(x in text for x in ["401","403","api_key_invalid","unauthenticated","permission_denied"]),
+                  "modelUnavailable":any(x in text for x in ["404","not_found"]),
+                  "invalidImage":any(x in text for x in ["image","broken data stream","unidentifiedimage"])}))
+          except subprocess.TimeoutExpired:
+              print("Runtime log probe timed out; no log content was displayed.")
+          PY
