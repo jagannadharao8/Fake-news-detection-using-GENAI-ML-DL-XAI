@@ -1,23 +1,54 @@
 name: Sync to Hugging Face Hub
-
 on:
   push:
     branches: [main]
-  # to run this workflow manually from the Actions tab
+    paths: [server.py, src/**, static/**, Dockerfile, requirements.txt, README.md, .github/workflows/sync_to_huggingface.yml]
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: existing-huggingface-space
+  cancel-in-progress: false
 jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          lfs: true
-          
-      - name: Push to hub
+      - uses: actions/checkout@v4
+      - run: pip install huggingface_hub
+      - name: Update existing Space application and preserve its artifacts
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          pip install huggingface_hub
-          python -c "from huggingface_hub import HfApi; import os; api = HfApi(token=os.environ['HF_TOKEN']); api.upload_folder(folder_path='.', repo_id='jagannadharao8/fake-news-detection', repo_type='space', ignore_patterns=['.git/*', '.github/*', 'venv/*', '__pycache__/*'])"
+          python - <<'PY'
+          import os, shutil, tempfile
+          from pathlib import Path
+          from huggingface_hub import HfApi
+          token=os.environ.get("HF_TOKEN","")
+          if not token:
+              raise SystemExit("HF_TOKEN must be configured in repository secrets.")
+          api=HfApi(token=token)
+          if api.whoami().get("name") != "jagannadharao8":
+              raise SystemExit("The configured credential does not belong to the expected owner.")
+          header="""---
+          title: Misinformation Evidence Assistant
+          emoji: 🔎
+          colorFrom: blue
+          colorTo: purple
+          sdk: docker
+          app_port: 7860
+          ---
+          
+          """
+          with tempfile.TemporaryDirectory() as directory:
+              target=Path(directory)
+              for name in ["server.py", "Dockerfile", "requirements.txt"]:
+                  shutil.copy2(name,target/name)
+              for name in ["src","static"]:
+                  shutil.copytree(name,target/name,ignore=shutil.ignore_patterns("__pycache__","*.pyc"))
+              (target/"README.md").write_text(header+Path("README.md").read_text(encoding="utf-8"),encoding="utf-8")
+              # No deletion patterns: existing remote model artifacts and private settings remain.
+              api.upload_folder(folder_path=str(target),repo_id="jagannadharao8/fake-news-detection",
+                  repo_type="space",commit_message="Sync verified FastAPI application from GitHub")
+          print("Application uploaded with valid Space metadata; existing artifacts and private settings preserved.")
+          PY
