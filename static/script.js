@@ -96,10 +96,21 @@ function renderResults(data) {
   const flags = document.getElementById('flag-reasons');
   flags.innerHTML = '';
   if (data.clickbait?.clickbait > 0.5) flags.innerHTML += '<li>The headline uses emotionally charged language designed to create fear or urgency.</li>';
-  if (data.vision?.verdict === 'mismatch') flags.innerHTML += '<li>The supplied image may not match the accompanying text.</li>';
+  if (data.vision?.available && data.vision?.label === 'mismatched') flags.innerHTML += '<li>The supplied image may not match the accompanying text.</li>';
   if (data.rag?.verdict === 'contradicted') flags.innerHTML += '<li>Web sources contradict the claims in this content.</li>';
   if (data.rag?.verdict === 'mixed') flags.innerHTML += '<li>Web sources show mixed signals about the claims in this content.</li>';
   if (flags.innerHTML === '') flags.innerHTML = '<li style="color:#16a34a;">No conclusive verification; inspect retrieved evidence.</li>';
+
+  const visionCard = document.getElementById('vision-card');
+  const vision = data.vision || {};
+  const hasVision = Object.keys(vision).length > 0;
+  visionCard.style.display = hasVision ? 'block' : 'none';
+  document.getElementById('vision-summary').textContent = vision.available
+    ? 'Assessment completed: ' + vision.label
+    : 'Image assessment is unavailable; no image claim was verified.';
+  document.getElementById('vision-provider').textContent = vision.available && vision.provider
+    ? 'Service: ' + vision.provider + (vision.model ? ' · ' + vision.model : '')
+    : '';
 
   // 2. RAG
   let ragAlert = "🌐 " + (data.rag?.verdict || "Unverifiable").toUpperCase();

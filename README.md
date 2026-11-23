@@ -32,3 +32,8 @@ MIT licensed educational application.
 Vision runtime failures are logged as a safe category, HTTP status and exception type. The wrapper omits raw provider exception text; this distinguishes expired credentials, API access, quota and request errors without logging secret values.
 
 Vision requests use a 20-second SDK request timeout and at most two attempts for transient server responses (500/502/503/504), with backoff. Credential and permission failures are not retried. Exhausted requests keep the unavailable/Uncertain fallback; successful SDK clients are closed after each call.
+
+## Vision provider selection
+VISION_PROVIDER=auto uses the existing GROQ_API_KEY with GROQ_VISION_MODEL (default qwen/qwen3.8-27b) first, then the configured Gemini service if Groq is unavailable. Set VISION_PROVIDER=groq or gemini to select only one. No new credential is created or embedded. Uploaded images are processed by the selected cloud provider.
+
+Provider responses are validated before use; missing labels, invalid/non-finite scores and empty probability mass yield the safe unavailable path. Successful vision API results include provider/model metadata. Image-language assessment is a heuristic and does not prove image authenticity.

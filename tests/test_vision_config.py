@@ -38,7 +38,7 @@ class VisionTests(unittest.TestCase):
 
     def test_unavailable_provider_abstains(self):
         vision = load_vision()
-        with patch.object(vision, "QWEN_AVAILABLE", True), patch.object(vision, "_call_gemini", return_value=None):
+        with patch.object(vision, "QWEN_AVAILABLE", True), patch.object(vision, "_call_vision", return_value=None):
             for result in [vision.predict_consistency("test.png", "test"), vision.predict_standalone("test.png")]:
                 self.assertFalse(result["available"])
                 self.assertEqual(result["label"], "uncertain")
@@ -117,3 +117,78 @@ class VisionTests(unittest.TestCase):
                 result, calls = self.sdk_response_sequence([status])
                 self.assertEqual(calls, expected_calls)
                 self.assertIsNone(result)
+
+
+    def test_auto_provider_prefers_groq_and_falls_back_to_gemini(self):
+        vision = load_vision()
+        expected = {"label": "uncertain", "probs": {"consistent": .1, "mismatched": .1, "uncertain": .8}, "provider": "groq", "model": "test"}
+        with patch.dict(os.environ, {"VISION_PROVIDER": "auto", "GROQ_API_KEY": "unit-groq", "GEMINI_API_KEY": "unit-gemini"}), patch.object(
+                vision, "_call_groq", return_value=expected) as groq, patch.object(vision, "_call_gemini") as gemini:
+            self.assertEqual(vision._call_vision("test.png", "test"), expected)
+            gemini.assert_not_called()
+        with patch.dict(os.environ, {"VISION_PROVIDER": "auto", "GROQ_API_KEY": "unit-groq", "GEMINI_API_KEY": "unit-gemini"}), patch.object(
+                vision, "_call_groq", return_value=None), patch.object(vision, "_call_gemini", return_value=expected) as gemini:
+            self.assertEqual(vision._call_vision("test.png", "test"), expected)
+            gemini.assert_called_once()
+
+    def test_explicit_provider_does_not_call_the_other_service(self):
+        vision = load_vision()
+        with patch.dict(os.environ, {"VISION_PROVIDER": "gemini", "GROQ_API_KEY": "unit-groq", "GEMINI_API_KEY": "unit-gemini"}), patch.object(
+                vision, "_call_groq") as groq, patch.object(vision, "_call_gemini", return_value=None):
+            self.assertIsNone(vision._call_vision("test.png", "test"))
+            groq.assert_not_called()
+
+    def test_invalid_provider_assessments_are_rejected(self):
+        vision = load_vision()
+        values = [
+            None, [], {}, {"label": "wrong", "probs": {}},
+            {"label": "consistent", "probs": {"consistent": float("nan"), "mismatched": 0, "uncertain": 1}},
+            {"label": "consistent", "probs": {"consistent": -1, "mismatched": 1, "uncertain": 1}},
+            {"label": "consistent", "probs": {"consistent": True, "mismatched": 0, "uncertain": 0}},
+            {"label": "consistent", "probs": {"consistent": 0, "mismatched": 0, "uncertain": 0}},
+        ]
+        for value in values:
+            with self.subTest(value_type=type(value).__name__), self.assertRaises(vision.VisionResponseError):
+                vision._validate_assessment(value, "test", "test")
+        result = vision._validate_assessment({"label": "consistent", "probs": {"consistent": .7, "mismatched": .1, "uncertain": .1}}, "test", "model")
+        self.assertAlmostEqual(sum(result["probs"].values()), 1)
+
+    def test_real_groq_sdk_sends_image_json_and_returns_provider_metadata(self):
+        import httpx
+        import groq
+        import tempfile
+        from PIL import Image
+        vision = load_vision()
+        requests = []
+        def handler(request):
+            requests.append(json.loads(request.content))
+            content = json.dumps({"label": "consistent", "probs": {"consistent": .9, "mismatched": .05, "uncertain": .05}})
+            return httpx.Response(200, json={"id": "unit", "object": "chat.completion", "created": 0, "model": "qwen/qwen3.8-27b",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}]})
+        real_client = groq.Groq
+        transport_client = httpx.Client(transport=httpx.MockTransport(handler))
+        def make_client(**kwargs):
+            return real_client(http_client=transport_client, **kwargs)
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "test.png")
+            Image.new("RGB", (32, 32), "white").save(path)
+            with patch.object(groq, "Groq", side_effect=make_client), patch.dict(os.environ, {"GROQ_API_KEY": "unit-test-only-key", "GROQ_VISION_MODEL": "qwen/qwen3.8-27b"}):
+                result = vision._call_groq(path, "Return JSON classification.")
+        self.assertEqual(result["provider"], "groq")
+        self.assertEqual(result["label"], "consistent")
+        self.assertTrue(requests[0]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
+        self.assertEqual(requests[0]["response_format"], {"type": "json_object"})
+
+    def test_status_uses_http_status_when_provider_code_is_not_numeric(self):
+        vision = load_vision()
+        for code, status in [(None, 403), ("model_not_found", 404)]:
+            error = types.SimpleNamespace(code=code, status_code=status)
+            self.assertEqual(vision._provider_status(error), status)
+
+    def test_both_public_image_paths_use_the_selected_provider(self):
+        vision = load_vision()
+        assessment = {"label": "consistent", "probs": {"consistent": .9, "mismatched": .05, "uncertain": .05}, "provider": "groq", "model": "test"}
+        with patch.object(vision, "QWEN_AVAILABLE", True), patch.object(vision, "_call_vision", return_value=assessment):
+            for result in [vision.predict_consistency("test.png", "test"), vision.predict_standalone("test.png")]:
+                self.assertTrue(result["available"])
+                self.assertEqual(result["provider"], "groq")
