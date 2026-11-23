@@ -8,7 +8,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 7
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -19,13 +19,27 @@ jobs:
       - run: pip install huggingface_hub requests pillow
       - run: |
           python - <<'PY'
-          import os,json,subprocess,re
-          from huggingface_hub import HfApi
+          import os,json,subprocess,re,time,hashlib
+          from pathlib import Path
+          from huggingface_hub import HfApi,hf_hub_download
           api=HfApi(token=os.environ["HF_TOKEN"])
           if api.whoami().get("name")!="jagannadharao8":
               raise SystemExit("Unexpected credential owner.")
           space="jagannadharao8/fake-news-detection"
-          runtime=api.get_space_runtime(space)
+          expected_blob="66883e7688d0608790e33281390bd23762f0a494"
+          code_matches=False
+          for attempt in range(30):
+              runtime=api.get_space_runtime(space)
+              try:
+                  source=Path(hf_hub_download(space,filename="src/vlm/infer.py",repo_type="space",token=os.environ["HF_TOKEN"])).read_bytes()
+                  blob=hashlib.sha1(b"blob "+str(len(source)).encode()+b"\\0"+source).hexdigest()
+                  code_matches=blob==expected_blob
+              except Exception:
+                  code_matches=False
+              if str(runtime.stage)=="RUNNING" and code_matches:
+                  break
+              time.sleep(5)
+          print(json.dumps({"deployedSourceMatchesGithub":code_matches,"spaceReady":str(runtime.stage)=="RUNNING"}),flush=True)
           secrets=api.get_space_secrets(space)
           variables=api.get_space_variables(space)
           print(json.dumps({"runtimeStage":runtime.stage,"hardware":runtime.hardware,
@@ -58,7 +72,8 @@ jobs:
               provider=" ".join(line for line in lower.splitlines() if "gemini vlm call failed" in line)
               print(json.dumps({"logsCommandSucceeded":result.returncode==0,
                   "visionProviderErrorLogged":bool(provider),
-                  "providerStatusCodes":sorted(set(re.findall(r"status=(\\d{3}|unknown|none)",provider))),
+                  "providerStatusCodes":sorted(set(re.findall(r"status=([0-9]{3}|unknown|none)",provider))),
+                  "visionFailureCategories":sorted(set(re.findall(r"category=([a-z_]+)",provider)) & {"invalid_credential","service_disabled","unsupported_location","credential_or_permission","quota_or_rate_limit","model_unavailable","invalid_response","provider_timeout","sdk_configuration","invalid_request","provider_error"}),
                   "credentialRejected":any(x in provider for x in ["401","403","api_key_invalid","permission_denied"]),
                   "quotaOrRateLimit":any(x in provider for x in ["429","quota","resource_exhausted"]),
                   "modelUnavailable":any(x in provider for x in ["404","not_found"]),
