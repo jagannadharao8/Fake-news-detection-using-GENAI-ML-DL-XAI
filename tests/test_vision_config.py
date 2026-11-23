@@ -184,3 +184,11 @@ class VisionTests(unittest.TestCase):
         for code, status in [(None, 403), ("model_not_found", 404)]:
             error = types.SimpleNamespace(code=code, status_code=status)
             self.assertEqual(vision._provider_status(error), status)
+
+    def test_both_public_image_paths_use_the_selected_provider(self):
+        vision = load_vision()
+        assessment = {"label": "consistent", "probs": {"consistent": .9, "mismatched": .05, "uncertain": .05}, "provider": "groq", "model": "test"}
+        with patch.object(vision, "QWEN_AVAILABLE", True), patch.object(vision, "_call_vision", return_value=assessment):
+            for result in [vision.predict_consistency("test.png", "test"), vision.predict_standalone("test.png")]:
+                self.assertTrue(result["available"])
+                self.assertEqual(result["provider"], "groq")

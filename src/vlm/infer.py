@@ -251,7 +251,7 @@ def predict_standalone(image_path: str) -> Dict[str, Any]:
         "Return a JSON object with 'label' (one of: consistent, mismatched, uncertain) and 'probs' (a dictionary with confidence scores summing to 1.0 for each of the three labels)."
     )
     
-    res = _call_gemini(image_path, prompt)
+    res = _call_vision(image_path, prompt)
     if not res:
         return dict(_FALLBACK_STANDALONE)
         
