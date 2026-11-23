@@ -1,4 +1,4 @@
-name: Diagnose current Space runtime without exposing credentials
+name: Verify deployed multi-provider vision
 on:
   push:
     branches: [diagnostics/vision-availability-20261028]
@@ -6,12 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
-  diagnose:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 15
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -19,73 +18,71 @@ jobs:
       - run: pip install huggingface_hub requests pillow
       - run: |
           python - <<'PY'
-          import os,json,subprocess,re,time,hashlib
+          import os,json,time,io,hashlib
           from pathlib import Path
+          import requests
+          from PIL import Image,ImageDraw,ImageFont
           from huggingface_hub import HfApi,hf_hub_download
           api=HfApi(token=os.environ["HF_TOKEN"])
           if api.whoami().get("name")!="jagannadharao8":
               raise SystemExit("Unexpected credential owner.")
           space="jagannadharao8/fake-news-detection"
-          expected_blob="3e7b126f0162ec3bc23b2078010ebce3c8d90e41"
-          runtime=api.get_space_runtime(space)
-          print(json.dumps({"initialRuntimeStage":getattr(runtime.stage,"value",runtime.stage)}),flush=True)
-          for attempt in range(72):
-              if getattr(runtime.stage,"value",runtime.stage)=="RUNNING":
-                  break
-              time.sleep(5)
+          expected="5bf7256a01c1ed734d5fc88e938bcf095cd3826a"
+          source_matches=False
+          stage=None
+          for attempt in range(90):
               runtime=api.get_space_runtime(space)
-          code_matches=False
-          blob=None
-          try:
-              source=Path(hf_hub_download(space,filename="src/vlm/infer.py",repo_type="space",token=os.environ["HF_TOKEN"])).read_bytes()
-              blob=hashlib.sha1(b"blob "+str(len(source)).encode()+bytes([0])+source).hexdigest()
-              code_matches=blob==expected_blob
-          except Exception as error:
-              print(json.dumps({"sourceReadErrorType":type(error).__name__}),flush=True)
-          stage=getattr(runtime.stage,"value",runtime.stage)
-          print(json.dumps({"deployedSourceMatchesGithub":code_matches,"observedSourceBlob":blob,"expectedSourceBlob":expected_blob,"spaceReady":stage=="RUNNING"}),flush=True)
+              stage=getattr(runtime.stage,"value",runtime.stage)
+              if stage=="RUNNING":
+                  try:
+                      data=Path(hf_hub_download(space,filename="src/vlm/infer.py",repo_type="space",token=os.environ["HF_TOKEN"])).read_bytes()
+                      observed=hashlib.sha1(b"blob "+str(len(data)).encode()+bytes([0])+data).hexdigest()
+                      source_matches=observed==expected
+                  except Exception:
+                      source_matches=False
+                  if source_matches:
+                      break
+              time.sleep(5)
           secrets=api.get_space_secrets(space)
           variables=api.get_space_variables(space)
-          print(json.dumps({"runtimeStage":runtime.stage,"hardware":runtime.hardware,
-              "requestedHardware":runtime.requested_hardware,
-              "geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
-              "geminiCredentialAvailableInGithub":bool(os.environ.get("GEMINI_API_KEY"))}),flush=True)
-          import requests,io
-          from PIL import Image,ImageDraw
+          print(json.dumps({"stage":stage,"sourceMatchesGithub":source_matches,
+              "groqConfigured":"GROQ_API_KEY" in secrets or "GROQ_API_KEY" in variables,
+              "geminiConfigured":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables}),flush=True)
+          if stage!="RUNNING" or not source_matches:
+              raise SystemExit("Matching runtime is not ready.")
           base="https://jagannadharao8-fake-news-detection.hf.space"
-          try:
-              health=requests.get(base+"/health",timeout=20)
-              print(json.dumps({"healthStatus":health.status_code}),flush=True)
-              if health.status_code==200 and code_matches and stage=="RUNNING":
-                  image=Image.new("RGB",(384,256),"white")
-                  ImageDraw.Draw(image).text((20,100),"SYNTHETIC VERIFICATION",fill="black")
-                  image_bytes=io.BytesIO()
-                  image.save(image_bytes,format="PNG")
-                  response=requests.post(base+"/api/analyze",files={"image":("test.png",image_bytes.getvalue(),"image/png")},timeout=65)
-                  print(json.dumps({"imageRequestStatus":response.status_code}),flush=True)
+          health=requests.get(base+"/health",timeout=30)
+          assert health.status_code==200
+          html=requests.get(base+"/",timeout=30).text
+          assert 'id="vision-card"' in html
+          print(json.dumps({"health":health.status_code,"visionPanelPublished":True}),flush=True)
+          image=Image.new("RGB",(480,300),"white")
+          ImageDraw.Draw(image).text((20,110),"VERIFICATION CARD 7319",fill="black",font=ImageFont.load_default(size=24))
+          image_bytes=io.BytesIO()
+          image.save(image_bytes,format="PNG")
+          results=[]
+          for mode,text in [
+              ("image_only",""),
+              ("matching_text_image","The attached image is a white verification card that reads VERIFICATION CARD 7319."),
+              ("mismatched_text_image","This photograph shows a crowded beach at sunset with many people swimming.")
+          ]:
+              try:
+                  response=requests.post(base+"/api/analyze",files={"image":("verification.png",image_bytes.getvalue(),"image/png")},
+                      data={"text":text},timeout=150)
+                  row={"input":mode,"status":response.status_code}
                   if response.status_code==200:
                       value=response.json()
-                      print(json.dumps({"visionAvailable":value.get("vision",{}).get("available"),
-                          "verdict":value.get("verdict"),"cardMatches":value.get("verdict")==value.get("card",{}).get("final_label")}),flush=True)
-          except requests.RequestException as error:
-              print(json.dumps({"publicProbeErrorType":type(error).__name__}),flush=True)
-          try:
-              result=subprocess.run(["hf","spaces","logs",space,"-n","120"],capture_output=True,text=True,timeout=40)
-              # Classify only; raw logs may contain user text or provider details.
-              lower=result.stdout.lower()
-              provider=" ".join(line for line in lower.splitlines() if "gemini vlm call failed" in line)
-              print(json.dumps({"logsCommandSucceeded":result.returncode==0,
-                  "visionProviderErrorLogged":bool(provider),
-                  "providerStatusCodes":sorted(set(re.findall(r"status=([0-9]{3}|unknown|none)",provider))),
-                  "visionFailureCategories":sorted(set(re.findall(r"category=([a-z_]+)",provider)) & {"invalid_credential","service_disabled","unsupported_location","credential_or_permission","quota_or_rate_limit","model_unavailable","invalid_response","provider_timeout","provider_unavailable","sdk_configuration","invalid_request","provider_error"}),
-                  "credentialRejected":any(x in provider for x in ["401","403","api_key_invalid","permission_denied"]),
-                  "quotaOrRateLimit":any(x in provider for x in ["429","quota","resource_exhausted"]),
-                  "modelUnavailable":any(x in provider for x in ["404","not_found"]),
-                  "outOfMemory":any(x in lower for x in ["out of memory","oomkilled","cannot allocate memory"]),
-                  "applicationStartupComplete":"application startup complete" in lower,
-                  "uvicornListening":"uvicorn running on" in lower,
-                  "modelDownloadStarted":"downloading missing ml models" in lower,
-                  "modelDownloadCompleted":"models downloaded" in lower}),flush=True)
-          except subprocess.TimeoutExpired:
-              print("Runtime log probe timed out; no raw log content was displayed.")
+                      vision=value.get("vision",{})
+                      row.update(available=vision.get("available"),visionLabel=vision.get("label"),
+                          provider=vision.get("provider"),model=vision.get("model"),
+                          verdict=value.get("verdict"),cardMatches=value.get("verdict")==value.get("card",{}).get("final_label"))
+                  print(json.dumps(row),flush=True)
+                  results.append(row)
+              except requests.RequestException as error:
+                  row={"input":mode,"requestErrorType":type(error).__name__}
+                  print(json.dumps(row),flush=True)
+                  results.append(row)
+          if not all(row.get("status")==200 and row.get("available") is True and row.get("cardMatches") is True for row in results):
+              raise SystemExit("One or more live image assessments did not complete.")
+          print("All deployed image-only and text/image paths completed with an available vision provider.",flush=True)
           PY
