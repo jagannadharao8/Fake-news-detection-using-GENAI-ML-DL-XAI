@@ -28,3 +28,5 @@ Fifteen offline policy/API tests cover decision consistency and mocked provider 
 GitHub Actions uploads the runtime server, src and static files to the existing Hugging Face Space. It adds the Docker SDK metadata to the remote README and preserves remote model artifacts and private settings. The root app.py, browser extension and fusion modules are legacy experiments; server.py is the deployed application entry point.
 
 MIT licensed educational application.
+
+Vision runtime failures are logged as a safe category, HTTP status and exception type. The wrapper omits raw provider exception text; this distinguishes expired credentials, API access, quota and request errors without logging secret values.
