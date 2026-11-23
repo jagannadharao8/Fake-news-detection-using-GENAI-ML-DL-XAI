@@ -32,7 +32,7 @@ jobs:
               runtime=api.get_space_runtime(space)
               try:
                   source=Path(hf_hub_download(space,filename="src/vlm/infer.py",repo_type="space",token=os.environ["HF_TOKEN"])).read_bytes()
-                  blob=hashlib.sha1(b"blob "+str(len(source)).encode()+b"\\0"+source).hexdigest()
+                  blob=hashlib.sha1(b"blob "+str(len(source)).encode()+bytes([0])+source).hexdigest()
                   code_matches=blob==expected_blob
               except Exception:
                   code_matches=False
