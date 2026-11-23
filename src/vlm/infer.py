@@ -40,6 +40,40 @@ def _entropy(probs_dict: Dict[str, float]) -> float:
         ent -= p * math.log(p)
     return ent
 
+
+def _provider_status(error):
+    try:
+        code = int(getattr(error, "code", getattr(error, "status_code", 0)))
+        return code if 100 <= code <= 599 else "unknown"
+    except (TypeError, ValueError):
+        return "unknown"
+
+def _failure_category(error):
+    """Classify in memory; never log provider text that may contain credentials."""
+    detail = str(error).lower()
+    status = _provider_status(error)
+    if any(value in detail for value in ("api_key_invalid", "api key not valid", "invalid api key", "api key expired", "reported as leaked")):
+        return "invalid_credential"
+    if any(value in detail for value in ("service_disabled", "api has not been used", "api is disabled")):
+        return "service_disabled"
+    if "location" in detail and ("not supported" in detail or "unsupported" in detail):
+        return "unsupported_location"
+    if status in (401, 403):
+        return "credential_or_permission"
+    if status == 429:
+        return "quota_or_rate_limit"
+    if status == 404:
+        return "model_unavailable"
+    if isinstance(error, json.JSONDecodeError):
+        return "invalid_response"
+    if "timeout" in type(error).__name__.lower() or "timed out" in detail:
+        return "provider_timeout"
+    if isinstance(error, (ImportError, AttributeError)):
+        return "sdk_configuration"
+    if status == 400:
+        return "invalid_request"
+    return "provider_error"
+
 def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
     try:
         from google import genai
@@ -79,7 +113,8 @@ def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
         )
         return json.loads(response.text)
     except Exception as e:
-        log.warning("Gemini VLM call failed (status=%s)", getattr(e, "code", getattr(e, "status_code", "unknown")))
+        log.warning("Gemini VLM call failed (category=%s,status=%s,type=%s)",
+                    _failure_category(e), _provider_status(e), type(e).__name__)
         return None
 
 def predict_consistency(

@@ -39,3 +39,36 @@ class VisionTests(unittest.TestCase):
             for result in [vision.predict_consistency("test.png", "test"), vision.predict_standalone("test.png")]:
                 self.assertFalse(result["available"])
                 self.assertEqual(result["label"], "uncertain")
+
+
+    def test_provider_failures_have_safe_actionable_categories(self):
+        vision = load_vision()
+        class Failure(Exception):
+            def __init__(self, code, message):
+                super().__init__(message)
+                self.code = code
+        for code, message, category in [
+            (400, "API key expired. private-marker", "invalid_credential"),
+            (400, "API key not valid", "invalid_credential"),
+            (403, "Access denied", "credential_or_permission"),
+            (403, "SERVICE_DISABLED", "service_disabled"),
+            (429, "Quota exhausted", "quota_or_rate_limit"),
+            (404, "Model unavailable", "model_unavailable"),
+            (400, "Invalid request body", "invalid_request")]:
+            self.assertEqual(vision._failure_category(Failure(code, message)), category)
+
+    def test_failure_log_excludes_raw_provider_details(self):
+        vision = load_vision()
+        class Failure(Exception):
+            code = 400
+        provider = types.ModuleType("google.genai")
+        provider.types = types.SimpleNamespace(GenerateContentConfig=lambda **kwargs: kwargs)
+        provider.Client = Mock(side_effect=Failure("API key expired: private-marker"))
+        google = types.ModuleType("google")
+        google.genai = provider
+        with patch.dict(sys.modules, {"google": google, "google.genai": provider}), self.assertLogs(vision.log, level="WARNING") as captured:
+            self.assertIsNone(vision._call_gemini("test.png", "test"))
+        message = " ".join(captured.output)
+        self.assertIn("invalid_credential", message)
+        self.assertIn("status=400", message)
+        self.assertNotIn("private-marker", message)
