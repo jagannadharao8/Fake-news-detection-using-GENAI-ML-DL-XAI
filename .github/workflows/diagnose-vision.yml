@@ -1,3 +1,4 @@
+# Recheck current provider configuration on 23 November 2026.
 name: Diagnose vision configuration without exposing credentials
 on:
   push:
@@ -16,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install huggingface_hub
+      - run: pip install huggingface_hub pillow requests
       - run: |
           python - <<'PY'
           import os,json,subprocess
@@ -25,6 +26,20 @@ jobs:
           if api.whoami().get("name")!="jagannadharao8":
               raise SystemExit("Unexpected credential owner.")
           space="jagannadharao8/fake-news-detection"
+          import io,requests
+          from PIL import Image,ImageDraw
+          pic=Image.new("RGB",(384,256),"white")
+          ImageDraw.Draw(pic).text((20,100),"SYNTHETIC VERIFICATION",fill="black")
+          blob=io.BytesIO()
+          pic.save(blob,format="PNG")
+          response=requests.post("https://jagannadharao8-fake-news-detection.hf.space/api/analyze",
+              files={"image":("verification.png",blob.getvalue(),"image/png")},
+              data={"text":"Synthetic verification image. No external claim is being asserted."},timeout=150)
+          print(json.dumps({"imageRequestStatus":response.status_code}))
+          if response.status_code==200:
+              result=response.json()
+              print(json.dumps({"visionAvailable":result.get("vision",{}).get("available"),
+                  "verdictMatchesCard":result.get("verdict")==result.get("card",{}).get("final_label")}))
           secrets=api.get_space_secrets(space)
           variables=api.get_space_variables(space)
           print(json.dumps({"geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
