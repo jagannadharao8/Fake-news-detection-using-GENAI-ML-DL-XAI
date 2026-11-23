@@ -178,3 +178,9 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(result["label"], "consistent")
         self.assertTrue(requests[0]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
         self.assertEqual(requests[0]["response_format"], {"type": "json_object"})
+
+    def test_status_uses_http_status_when_provider_code_is_not_numeric(self):
+        vision = load_vision()
+        for code, status in [(None, 403), ("model_not_found", 404)]:
+            error = types.SimpleNamespace(code=code, status_code=status)
+            self.assertEqual(vision._provider_status(error), status)

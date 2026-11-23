@@ -21,3 +21,8 @@ jobs:
         with:
           node-version: "22"
       - run: node --check static/script.js
+      - run: npm install --prefix .qa jsdom
+      - name: Verify image result states and safe metadata rendering
+        env:
+          NODE_PATH: ${{ github.workspace }}/.qa/node_modules
+        run: node tests/test_vision_ui.cjs

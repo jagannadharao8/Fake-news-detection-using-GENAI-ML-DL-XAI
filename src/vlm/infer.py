@@ -67,11 +67,14 @@ def _validate_assessment(value, provider, model):
     return {"label": value["label"], "probs": checked, "provider": provider, "model": model}
 
 def _provider_status(error):
-    try:
-        code = int(getattr(error, "code", getattr(error, "status_code", 0)))
-        return code if 100 <= code <= 599 else "unknown"
-    except (TypeError, ValueError):
-        return "unknown"
+    for candidate in (getattr(error, "code", None), getattr(error, "status_code", None)):
+        try:
+            code = int(candidate)
+            if 100 <= code <= 599:
+                return code
+        except (TypeError, ValueError):
+            pass
+    return "unknown"
 
 def _failure_category(error):
     """Classify in memory; never log provider text that may contain credentials."""

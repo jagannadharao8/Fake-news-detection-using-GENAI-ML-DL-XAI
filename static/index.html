@@ -26,7 +26,7 @@
             <div class="file-upload">
               <span class="upload-btn">↑ Browse files</span>
               <span id="file-name" style="margin-top: 1rem; font-size: 0.9rem; color: #475569;">Drag and drop file here</span>
-              <div class="file-desc" style="margin-top: 0.5rem;">Limit 10MB • JPG, PNG, PDF</div>
+              <div class="file-desc" style="margin-top: 0.5rem;">Limit 10MB • JPG, PNG, PDF<br>Image analysis uses the configured cloud provider (Groq or Gemini).</div>
               <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/webp, application/pdf">
             </div>
           </div>
@@ -78,6 +78,13 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div id="vision-card" class="white-card" style="display:none;">
+        <h3 class="section-title">🖼️ Image assessment</h3>
+        <p id="vision-summary" class="summary-text"></p>
+        <p id="vision-provider" class="summary-text"></p>
+        <p class="summary-text">This model signal requires source review and does not establish image authenticity.</p>
       </div>
 
       <!-- 2. Web Fact Check -->
