@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install huggingface_hub
+      - run: pip install huggingface_hub requests pillow
       - run: |
           python - <<'PY'
           import os,json,subprocess
@@ -32,6 +32,25 @@ jobs:
               "requestedHardware":runtime.requested_hardware,
               "geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
               "geminiCredentialAvailableInGithub":bool(os.environ.get("GEMINI_API_KEY"))}),flush=True)
+          import requests,io
+          from PIL import Image,ImageDraw
+          base="https://jagannadharao8-fake-news-detection.hf.space"
+          try:
+              health=requests.get(base+"/health",timeout=20)
+              print(json.dumps({"healthStatus":health.status_code}),flush=True)
+              if health.status_code==200:
+                  image=Image.new("RGB",(384,256),"white")
+                  ImageDraw.Draw(image).text((20,100),"SYNTHETIC VERIFICATION",fill="black")
+                  image_bytes=io.BytesIO()
+                  image.save(image_bytes,format="PNG")
+                  response=requests.post(base+"/api/analyze",files={"image":("test.png",image_bytes.getvalue(),"image/png")},timeout=65)
+                  print(json.dumps({"imageRequestStatus":response.status_code}),flush=True)
+                  if response.status_code==200:
+                      value=response.json()
+                      print(json.dumps({"visionAvailable":value.get("vision",{}).get("available"),
+                          "verdict":value.get("verdict"),"cardMatches":value.get("verdict")==value.get("card",{}).get("final_label")}),flush=True)
+          except requests.RequestException as error:
+              print(json.dumps({"publicProbeErrorType":type(error).__name__}),flush=True)
           try:
               result=subprocess.run(["hf","spaces","logs",space,"-n","120"],capture_output=True,text=True,timeout=40)
               # Classify only; raw logs may contain user text or provider details.
