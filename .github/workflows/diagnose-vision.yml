@@ -19,7 +19,7 @@ jobs:
       - run: pip install huggingface_hub requests pillow
       - run: |
           python - <<'PY'
-          import os,json,subprocess
+          import os,json,subprocess,re
           from huggingface_hub import HfApi
           api=HfApi(token=os.environ["HF_TOKEN"])
           if api.whoami().get("name")!="jagannadharao8":
@@ -58,6 +58,7 @@ jobs:
               provider=" ".join(line for line in lower.splitlines() if "gemini vlm call failed" in line)
               print(json.dumps({"logsCommandSucceeded":result.returncode==0,
                   "visionProviderErrorLogged":bool(provider),
+                  "providerStatusCodes":sorted(set(re.findall(r"status=(\\d{3}|unknown|none)",provider))),
                   "credentialRejected":any(x in provider for x in ["401","403","api_key_invalid","permission_denied"]),
                   "quotaOrRateLimit":any(x in provider for x in ["429","quota","resource_exhausted"]),
                   "modelUnavailable":any(x in provider for x in ["404","not_found"]),
