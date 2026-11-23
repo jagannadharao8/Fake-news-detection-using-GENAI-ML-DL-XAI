@@ -64,6 +64,8 @@ def _failure_category(error):
         return "quota_or_rate_limit"
     if status == 404:
         return "model_unavailable"
+    if status in (500, 502, 503, 504):
+        return "provider_unavailable"
     if isinstance(error, json.JSONDecodeError):
         return "invalid_response"
     if "timeout" in type(error).__name__.lower() or "timed out" in detail:
@@ -75,12 +77,18 @@ def _failure_category(error):
     return "provider_error"
 
 def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
+    client = None
     try:
         from google import genai
         from google.genai import types
         
         # Pulls GEMINI_API_KEY from environment
-        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        client = genai.Client(
+            api_key=os.environ.get("GEMINI_API_KEY"),
+            http_options=types.HttpOptions(
+                timeout=20000,
+                retry_options=types.HttpRetryOptions(attempts=2, initial_delay=1.0,
+                    max_delay=2.0, jitter=0.5, http_status_codes=[500, 502, 503, 504])))
         
         img = Image.open(image_path).convert("RGB")
         
@@ -116,6 +124,12 @@ def _call_gemini(image_path: str, prompt: str) -> Dict[str, Any]:
         log.warning("Gemini VLM call failed (category=%s,status=%s,type=%s)",
                     _failure_category(e), _provider_status(e), type(e).__name__)
         return None
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 def predict_consistency(
     image_path: str,
