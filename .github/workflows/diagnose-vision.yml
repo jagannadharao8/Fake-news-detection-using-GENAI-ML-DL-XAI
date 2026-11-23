@@ -1,5 +1,4 @@
-# Recheck current provider configuration on 23 November 2026.
-name: Diagnose vision configuration without exposing credentials
+name: Diagnose current Space runtime without exposing credentials
 on:
   push:
     branches: [diagnostics/vision-availability-20261028]
@@ -17,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install huggingface_hub pillow requests
+      - run: pip install huggingface_hub
       - run: |
           python - <<'PY'
           import os,json,subprocess
@@ -26,35 +25,28 @@ jobs:
           if api.whoami().get("name")!="jagannadharao8":
               raise SystemExit("Unexpected credential owner.")
           space="jagannadharao8/fake-news-detection"
-          import io,requests
-          from PIL import Image,ImageDraw
-          pic=Image.new("RGB",(384,256),"white")
-          ImageDraw.Draw(pic).text((20,100),"SYNTHETIC VERIFICATION",fill="black")
-          blob=io.BytesIO()
-          pic.save(blob,format="PNG")
-          response=requests.post("https://jagannadharao8-fake-news-detection.hf.space/api/analyze",
-              files={"image":("verification.png",blob.getvalue(),"image/png")},
-              data={"text":"Synthetic verification image. No external claim is being asserted."},timeout=150)
-          print(json.dumps({"imageRequestStatus":response.status_code}))
-          if response.status_code==200:
-              result=response.json()
-              print(json.dumps({"visionAvailable":result.get("vision",{}).get("available"),
-                  "verdictMatchesCard":result.get("verdict")==result.get("card",{}).get("final_label")}))
+          runtime=api.get_space_runtime(space)
           secrets=api.get_space_secrets(space)
           variables=api.get_space_variables(space)
-          print(json.dumps({"geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
-              "geminiCredentialAvailableInGithub":bool(os.environ.get("GEMINI_API_KEY")),
-              "runtimeStage":api.get_space_runtime(space).stage}))
+          print(json.dumps({"runtimeStage":runtime.stage,"hardware":runtime.hardware,
+              "requestedHardware":runtime.requested_hardware,
+              "geminiConfiguredInSpace":"GEMINI_API_KEY" in secrets or "GEMINI_API_KEY" in variables,
+              "geminiCredentialAvailableInGithub":bool(os.environ.get("GEMINI_API_KEY"))}),flush=True)
           try:
-              result=subprocess.run(["hf","spaces","logs",space,"-n","100"],capture_output=True,text=True,timeout=35)
-              # Never print raw logs: they may contain user text or provider details.
-              lines=[line.lower() for line in result.stdout.splitlines() if "gemini vlm call failed" in line.lower()]
-              text=" ".join(lines)
-              print(json.dumps({"visionProviderErrorLogged":bool(lines),
-                  "quotaOrRateLimit":any(x in text for x in ["429","resource_exhausted","quota"]),
-                  "credentialRejected":any(x in text for x in ["401","403","api_key_invalid","unauthenticated","permission_denied"]),
-                  "modelUnavailable":any(x in text for x in ["404","not_found"]),
-                  "invalidImage":any(x in text for x in ["image","broken data stream","unidentifiedimage"])}))
+              result=subprocess.run(["hf","spaces","logs",space,"-n","120"],capture_output=True,text=True,timeout=40)
+              # Classify only; raw logs may contain user text or provider details.
+              lower=result.stdout.lower()
+              provider=" ".join(line for line in lower.splitlines() if "gemini vlm call failed" in line)
+              print(json.dumps({"logsCommandSucceeded":result.returncode==0,
+                  "visionProviderErrorLogged":bool(provider),
+                  "credentialRejected":any(x in provider for x in ["401","403","api_key_invalid","permission_denied"]),
+                  "quotaOrRateLimit":any(x in provider for x in ["429","quota","resource_exhausted"]),
+                  "modelUnavailable":any(x in provider for x in ["404","not_found"]),
+                  "outOfMemory":any(x in lower for x in ["out of memory","oomkilled","cannot allocate memory"]),
+                  "applicationStartupComplete":"application startup complete" in lower,
+                  "uvicornListening":"uvicorn running on" in lower,
+                  "modelDownloadStarted":"downloading missing ml models" in lower,
+                  "modelDownloadCompleted":"models downloaded" in lower}),flush=True)
           except subprocess.TimeoutExpired:
-              print("Runtime log probe timed out; no log content was displayed.")
+              print("Runtime log probe timed out; no raw log content was displayed.")
           PY
