@@ -8,7 +8,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 9
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -26,8 +26,14 @@ jobs:
           if api.whoami().get("name")!="jagannadharao8":
               raise SystemExit("Unexpected credential owner.")
           space="jagannadharao8/fake-news-detection"
-          expected_blob="66883e7688d0608790e33281390bd23762f0a494"
+          expected_blob="3e7b126f0162ec3bc23b2078010ebce3c8d90e41"
           runtime=api.get_space_runtime(space)
+          print(json.dumps({"initialRuntimeStage":getattr(runtime.stage,"value",runtime.stage)}),flush=True)
+          for attempt in range(72):
+              if getattr(runtime.stage,"value",runtime.stage)=="RUNNING":
+                  break
+              time.sleep(5)
+              runtime=api.get_space_runtime(space)
           code_matches=False
           blob=None
           try:
@@ -50,7 +56,7 @@ jobs:
           try:
               health=requests.get(base+"/health",timeout=20)
               print(json.dumps({"healthStatus":health.status_code}),flush=True)
-              if health.status_code==200 and code_matches:
+              if health.status_code==200 and code_matches and stage=="RUNNING":
                   image=Image.new("RGB",(384,256),"white")
                   ImageDraw.Draw(image).text((20,100),"SYNTHETIC VERIFICATION",fill="black")
                   image_bytes=io.BytesIO()
@@ -71,7 +77,7 @@ jobs:
               print(json.dumps({"logsCommandSucceeded":result.returncode==0,
                   "visionProviderErrorLogged":bool(provider),
                   "providerStatusCodes":sorted(set(re.findall(r"status=([0-9]{3}|unknown|none)",provider))),
-                  "visionFailureCategories":sorted(set(re.findall(r"category=([a-z_]+)",provider)) & {"invalid_credential","service_disabled","unsupported_location","credential_or_permission","quota_or_rate_limit","model_unavailable","invalid_response","provider_timeout","sdk_configuration","invalid_request","provider_error"}),
+                  "visionFailureCategories":sorted(set(re.findall(r"category=([a-z_]+)",provider)) & {"invalid_credential","service_disabled","unsupported_location","credential_or_permission","quota_or_rate_limit","model_unavailable","invalid_response","provider_timeout","provider_unavailable","sdk_configuration","invalid_request","provider_error"}),
                   "credentialRejected":any(x in provider for x in ["401","403","api_key_invalid","permission_denied"]),
                   "quotaOrRateLimit":any(x in provider for x in ["429","quota","resource_exhausted"]),
                   "modelUnavailable":any(x in provider for x in ["404","not_found"]),
